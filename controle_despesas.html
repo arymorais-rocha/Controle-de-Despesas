@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controle de Despesas</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f4f6f8;color:#1f2937}
+header{background:#111827;color:white;padding:22px 28px;display:flex;justify-content:space-between;align-items:center;gap:15px}
+h1{margin:0;font-size:24px}.sub{opacity:.75;font-size:13px;margin-top:4px}
+.container{max-width:1250px;margin:25px auto;padding:0 18px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.card{background:white;border-radius:14px;padding:18px;box-shadow:0 2px 10px #0000000d}
+.card small{color:#6b7280}.card strong{display:block;font-size:24px;margin-top:7px}
+.toolbar{background:white;padding:14px;border-radius:14px;display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px}
+input,button,select{font:inherit}input,select{border:1px solid #d1d5db;border-radius:9px;padding:10px;background:white}
+button{border:0;border-radius:9px;padding:10px 14px;cursor:pointer;font-weight:600}
+.primary{background:#111827;color:white}.secondary{background:#e5e7eb}.danger{background:#fee2e2;color:#991b1b}
+.table-wrap{background:white;border-radius:14px;overflow:auto;box-shadow:0 2px 10px #0000000d}
+table{width:100%;border-collapse:collapse;min-width:850px}th,td{padding:13px 12px;border-bottom:1px solid #eef0f3;text-align:left;font-size:14px}th{background:#f9fafb;color:#4b5563}
+.status{padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;display:inline-block}.pago{background:#dcfce7;color:#166534}.vencida{background:#fee2e2;color:#991b1b}.hoje{background:#fef3c7;color:#92400e}.aberto{background:#e0e7ff;color:#3730a3}
+.actions button{padding:6px 9px;font-size:12px;margin-right:4px}
+.modal{display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center;padding:15px}.modal.open{display:flex}.box{background:white;border-radius:15px;padding:22px;width:min(520px,100%)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:5px}.field.full{grid-column:1/-1}.field label{font-size:12px;font-weight:700;color:#4b5563}
+@media(max-width:800px){.cards{grid-template-columns:1fr 1fr}}@media(max-width:500px){.cards{grid-template-columns:1fr}.grid{grid-template-columns:1fr}}
+
+#controleSelect{min-width:180px;cursor:pointer}
+.status-filter{position:relative;display:inline-block}
+.status-menu{display:none;position:absolute;z-index:20;top:calc(100% + 6px);left:0;background:white;border:1px solid #d1d5db;border-radius:10px;padding:10px;min-width:190px;box-shadow:0 8px 24px #0002}
+.status-menu.open{display:block}
+.status-menu label{display:flex;align-items:center;gap:8px;padding:7px 4px;cursor:pointer;font-size:13px}
+.status-menu input{accent-color:#111827}
+.clear-status{width:100%;margin-top:6px}
+
+.manage-list{margin-top:15px;display:flex;flex-direction:column;gap:10px;max-height:250px;overflow-y:auto}
+.manage-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px}
+
+@media print{
+  body{background:white}
+  .toolbar,.actions,header button,header select{display:none!important}
+  .container{max-width:none;margin:0;padding:10px}
+  .table-wrap{box-shadow:none}
+  .cards{grid-template-columns:repeat(4,1fr)}
+  body.print-only-selected .card:not(.card-selected){display:none!important}
+  body.print-only-selected .cards{grid-template-columns:1fr!important}
+  table{min-width:0}th,td{font-size:11px;padding:7px}.sub{display:none}h1{color:#111}.status{border:0}input[type=checkbox]{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+<div>
+<h1>Controle de Despesas</h1>
+<div class="sub">Painel de despesas separado por controle</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+<select id="controleSelect" onchange="trocarControle()" style="padding:10px 12px;border-radius:9px;border:0;font-weight:700">
+</select>
+<button class="secondary" onclick="openNovoControleModal()" style="color:#111827">+ Novo</button>
+<button class="secondary" onclick="openGerenciarModal()" style="color:#111827">⚙ Gerenciar</button>
+<button class="primary" onclick="openModal()">+ Nova despesa</button>
+</div>
+</header>
+<div class="container">
+<div style="margin-bottom:12px;font-weight:700;font-size:18px" id="controleTitulo">Despesas</div>
+<div class="cards">
+<div class="card"><small>Total em aberto</small><strong id="aberto">R$ 0,00</strong></div>
+<div class="card"><small>Vencidas</small><strong id="vencida">R$ 0,00</strong></div>
+<div class="card"><small>Vence hoje</small><strong id="hoje">R$ 0,00</strong></div>
+<div class="card card-selected"><small>Total das selecionadas</small><strong id="selecionadasTotal">R$ 0,00</strong></div>
+</div>
+<div class="toolbar">
+<button class="secondary" onclick="document.getElementById('controleSelect').focus()">Trocar controle</button>
+<input id="search" placeholder="Pesquisar fornecedor..." oninput="render()">
+<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600">De:
+<input id="periodoDe" type="date" onchange="render()"></label>
+<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600">Até:
+<input id="periodoAte" type="date" onchange="render()"></label>
+<button class="secondary" onclick="limparPeriodo()">Limpar período</button>
+<div class="status-filter">
+  <button type="button" class="secondary" onclick="toggleStatusMenu()">Situações ▾</button>
+  <div id="statusMenu" class="status-menu">
+    <label><input type="checkbox" class="statusCheck" value="aberto" onchange="render()"> Em aberto</label>
+    <label><input type="checkbox" class="statusCheck" value="vencida" onchange="render()"> Vencidas</label>
+    <label><input type="checkbox" class="statusCheck" value="hoje" onchange="render()"> Vence hoje</label>
+    <label><input type="checkbox" class="statusCheck" value="pago" onchange="render()"> Pagas</label>
+    <button type="button" class="secondary clear-status" onclick="clearStatusFilter()">Limpar situações</button>
+  </div>
+</div>
+<button class="secondary" onclick="exportCSV()">Exportar CSV</button>
+<button class="primary" onclick="exportPDF()">Exportar PDF</button>
+<button class="primary" onclick="exportSelectedPDF()">PDF das selecionadas</button>
+<button class="secondary" onclick="selectAllVisible()">Marcar todas</button>
+<button class="secondary" onclick="clearSelected()">Desmarcar todas</button>
+<button class="secondary" onclick="resetData()">Restaurar planilha original</button>
+</div>
+<div class="table-wrap"><table><thead><tr><th style="width:45px;text-align:center"><input type="checkbox" id="selectAll" title="Marcar todas as visíveis" onchange="toggleAllVisible(this.checked)"></th><th>Fornecedor</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="tbody"></tbody></table></div>
+</div>
+
+<div class="modal" id="modal"><div class="box">
+<h2 id="modalTitle">Nova despesa</h2>
+<div class="grid">
+<div class="field full"><label>Fornecedor</label><input id="fFornecedor"></div>
+<div class="field"><label>Valor</label><input id="fValor" type="number" step="0.01"></div>
+<div class="field"><label>Data de vencimento</label><input id="fVenc" type="date"></div>
+<div class="field"><label>Data de pagamento</label><input id="fPag" type="date"></div>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="save()">Salvar</button></div>
+</div></div>
+
+<div class="modal" id="modalNovoControle"><div class="box">
+<h2>Cadastrar Novo Controle</h2>
+<div class="grid">
+<div class="field full"><label>Nome do Controle (Ex: Fazenda Boa Esperança)</label><input id="fNomeControle" placeholder="Digite o nome do novo controle..."></div>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px"><button class="secondary" onclick="closeNovoControleModal()">Cancelar</button><button class="primary" onclick="cadastrarControle()">Cadastrar</button></div>
+</div></div>
+
+<div class="modal" id="modalGerenciar"><div class="box">
+<h2>Gerenciar Controles</h2>
+<div class="manage-list" id="manageList"></div>
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px"><button class="primary" onclick="closeGerenciarModal()">Fechar</button></div>
+</div></div>
+
+<script>
+const defaultControles = [
+  { id: 'romerio', nome: 'Romerio' },
+  { id: 'fazenda', nome: 'Fazenda Santa Helena' },
+  { id: 'boa_esperanca', nome: 'Fazenda Boa Esperança' },
+  { id: 'alvorada', nome: 'Fazenda Alvorada' }
+];
+
+const originalRomerio = [
+  {"fornecedor": "BANKME", "valor": 3204.3, "vencimento": "2026-08-10", "dataPagamento": "2026-08-10"},
+  {"fornecedor": "SF INDUSTRIA E COMERCIO- PANDORE NF-173", "valor": 384.09, "vencimento": "2026-08-18", "dataPagamento": ""},
+  {"fornecedor": "CONDOMINIO BRISA DO TOMBO", "valor": 1512.73, "vencimento": "2026-08-05", "dataPagamento": "2026-08-06"},
+  {"fornecedor": "CONDOMINIO SEQUOIA", "valor": 2567.71, "vencimento": "2026-08-06", "dataPagamento": "2026-08-06"},
+  {"fornecedor": "INTERNET APARTAMENTO SEQUOIA", "valor": 137.9, "vencimento": "2026-08-10", "dataPagamento": "2026-08-06"},
+  {"fornecedor": "UNIMED UBERLANDIA ", "valor": 2484.25, "vencimento": "2026-08-13", "dataPagamento": "2026-08-10"},
+  {"fornecedor": "UNIMED UBERLANDIA - ", "valor": 57.6, "vencimento": "2026-08-13", "dataPagamento": "2026-08-10"}
+];
+
+const originalFazenda = [
+  {"fornecedor": "INSS FAZENDA", "valor": 511.88, "vencimento": "2026-06-19", "dataPagamento": ""},
+  {"fornecedor": "MISLENE MARTINS - WM GERADORES", "valor": 1775.0, "vencimento": "2026-08-05", "dataPagamento": "2026-08-06"},
+  {"fornecedor": "BOLETO COMIGO- CARTÃO", "valor": 123172.14, "vencimento": "2026-08-07", "dataPagamento": "2026-08-07"},
+  {"fornecedor": "HONORARIOS  - UNIAO CONTABIL", "valor": 420.0, "vencimento": "2026-08-10", "dataPagamento": "2026-08-10"},
+  {"fornecedor": "BOLETO COMIGO- MATERIAIS INSEMINAÇÃO 4/6", "valor": 2077.4, "vencimento": "2026-08-11", "dataPagamento": "2026-08-10"},
+  {"fornecedor": "ENERGIA RIO BONITO Jul/2026", "valor": 150.28, "vencimento": "2026-08-12", "dataPagamento": "2026-08-10"},
+  {"fornecedor": "MERCANTIL RODRIGUES", "valor": 553.77, "vencimento": "2026-08-14", "dataPagamento": "2026-08-10"},
+  {"fornecedor": "SOMAFERTIL NF -128387", "valor": 783.0, "vencimento": "2026-08-14", "dataPagamento": "2026-08-10"},
+  {"fornecedor": "FGTS FAZENDA", "valor": 907.76, "vencimento": "2026-08-20", "dataPagamento": ""},
+  {"fornecedor": "RIO VERDE MANGUEIRAS", "valor": 94.0, "vencimento": "2026-08-24", "dataPagamento": ""},
+  {"fornecedor": "BOLETO COMIGO- MATERIAIS INSEMINAÇÃO 5/6", "valor": 2077.4, "vencimento": "2026-09-10", "dataPagamento": ""},
+  {"fornecedor": "BOLETO COMIGO- MATERIAIS INSEMINAÇÃO 6/6", "valor": 2082.4, "vencimento": "2026-10-10", "dataPagamento": ""}
+];
+
+let listaControles = JSON.parse(localStorage.getItem('lista_controles')) || defaultControles;
+let controleAtual = localStorage.getItem('controle_atual') || 'romerio';
+
+const dadosOriginais = {
+  romerio: JSON.parse(JSON.stringify(originalRomerio)),
+  fazenda: JSON.parse(JSON.stringify(originalFazenda))
+};
+
+let data = JSON.parse(localStorage.getItem('controle_despesas_' + controleAtual)) || dadosOriginais[controleAtual] || [];
+let editing = -1;
+let selectedExpenses = new Set();
+
+function money(v){return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function today(){return new Date().toISOString().slice(0,10);}
+function status(x){
+  if(x.dataPagamento) return 'pago';
+  if(x.vencimento === today()) return 'hoje';
+  if(x.vencimento && x.vencimento < today()) return 'vencida';
+  return 'aberto';
+}
+function label(s){return s==='pago'?'Pago':s==='hoje'?'Vence hoje':s==='vencida'?'Vencida':'Em aberto';}
+function fmtDate(d){if(!d)return '-';let [y,m,day]=d.split('-');return `${day}/${m}/${y}`;}
+
+function renderSelectControles(){
+  const select = document.getElementById('controleSelect');
+  select.innerHTML = listaControles.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  select.value = controleAtual;
+}
+
+function openNovoControleModal(){
+  document.getElementById('fNomeControle').value = '';
+  document.getElementById('modalNovoControle').classList.add('open');
+}
+function closeNovoControleModal(){
+  document.getElementById('modalNovoControle').classList.remove('open');
+}
+
+function cadastrarControle(){
+  const nome = document.getElementById('fNomeControle').value.trim();
+  if(!nome){ alert('Digite o nome do novo controle.'); return; }
+  const id = 'ctrl_' + Date.now();
+  listaControles.push({ id, nome });
+  localStorage.setItem('lista_controles', JSON.stringify(listaControles));
+  controleAtual = id;
+  localStorage.setItem('controle_atual', controleAtual);
+  data = [];
+  persist();
+  renderSelectControles();
+  closeNovoControleModal();
+}
+
+function openGerenciarModal(){
+  renderGerenciarLista();
+  document.getElementById('modalGerenciar').classList.add('open');
+}
+function closeGerenciarModal(){
+  document.getElementById('modalGerenciar').classList.remove('open');
+}
+
+function renderGerenciarLista(){
+  const list = document.getElementById('manageList');
+  list.innerHTML = listaControles.map(c => `
+    <div class="manage-item">
+      <span style="font-weight:600">${esc(c.nome)}</span>
+      <div>
+        <button class="secondary" style="padding:4px 8px;font-size:12px" onclick="renomearControle('${c.id}')">Renomear</button>
+        <button class="danger" style="padding:4px 8px;font-size:12px" onclick="excluirControle('${c.id}')">Excluir</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renomearControle(id){
+  const found = listaControles.find(c => c.id === id);
+  if(!found) return;
+  const novoNome = prompt('Digite o novo nome para este controle:', found.nome);
+  if(novoNome && novoNome.trim()){
+    found.nome = novoNome.trim();
+    localStorage.setItem('lista_controles', JSON.stringify(listaControles));
+    renderSelectControles();
+    renderGerenciarLista();
+    render();
+  }
+}
+
+function excluirControle(id){
+  if(listaControles.length <= 1){
+    alert('Você deve manter pelo menos um controle cadastrado.');
+    return;
+  }
+  const found = listaControles.find(c => c.id === id);
+  if(confirm(`Tem certeza que deseja excluir o controle "${found ? found.nome : ''}" e todas as suas despesas?`)){
+    listaControles = listaControles.filter(c => c.id !== id);
+    localStorage.setItem('lista_controles', JSON.stringify(listaControles));
+    localStorage.removeItem('controle_despesas_' + id);
+    if(controleAtual === id){
+      controleAtual = listaControles[0].id;
+      localStorage.setItem('controle_atual', controleAtual);
+      data = JSON.parse(localStorage.getItem('controle_despesas_' + controleAtual)) || dadosOriginais[controleAtual] || [];
+    }
+    renderSelectControles();
+    renderGerenciarLista();
+    render();
+  }
+}
+
+function getStatusFilters(){
+  return [...document.querySelectorAll('.statusCheck:checked')].map(el=>el.value);
+}
+function toggleStatusMenu(){
+  document.getElementById('statusMenu').classList.toggle('open');
+}
+function clearStatusFilter(){
+  document.querySelectorAll('.statusCheck').forEach(el=>el.checked=false);
+  render();
+}
+document.addEventListener('click', function(e){
+  const box=document.querySelector('.status-filter');
+  if(box && !box.contains(e.target)) document.getElementById('statusMenu').classList.remove('open');
+});
+
+function render(){
+  renderSelectControles();
+  document.getElementById('controleTitulo').textContent='Despesas — ' + nomeControle();
+  const q=document.getElementById('search').value.toLowerCase();
+  const filters=getStatusFilters();
+  const de=document.getElementById('periodoDe').value;
+  const ate=document.getElementById('periodoAte').value;
+  if(de && ate && de > ate){ alert('A data inicial não pode ser maior que a data final.'); return; }
+  const rows=data.map((x,i)=>({...x,i,s:status(x)}))
+    .filter(x=>(!q||x.fornecedor.toLowerCase().includes(q)) &&
+      (filters.length===0||filters.includes(x.s)) &&
+      (!de || (x.vencimento||'')>=de) &&
+      (!ate || (x.vencimento||'')<=ate))
+    .sort((a,b)=>(a.vencimento||'').localeCompare(b.vencimento||''));
+  document.getElementById('tbody').innerHTML=rows.map(x=>`
+  <tr><td style="text-align:center"><input type="checkbox" class="expenseCheck" data-index="${x.i}" ${selectedExpenses.has(x.i)?'checked':''} onchange="toggleExpense(${x.i},this.checked)"></td>
+  <td>${esc(x.fornecedor)}</td><td>${money(x.valor)}</td><td>${fmtDate(x.vencimento)}</td><td>${fmtDate(x.dataPagamento)}</td>
+  <td><span class="status ${x.s}">${label(x.s)}</span></td>
+  <td class="actions"><button class="secondary" onclick="edit(${x.i})">Editar</button>${x.dataPagamento?'':`<button class="primary" onclick="pay(${x.i})">Pagar</button>`}<button class="danger" onclick="del(${x.i})">Excluir</button></td></tr>`).join('');
+  updateSelectAllState();
+
+  const sums={aberto:0,vencida:0,hoje:0};
+  data.forEach(x=>{
+    const st = status(x);
+    if(st !== 'pago') sums[st] += Number(x.valor)||0;
+  });
+
+  let totalSelecionadas = 0;
+  selectedExpenses.forEach(i => {
+    if(data[i]) totalSelecionadas += Number(data[i].valor) || 0;
+  });
+
+  document.getElementById('aberto').textContent=money(sums.aberto);
+  document.getElementById('vencida').textContent=money(sums.vencida);
+  document.getElementById('hoje').textContent=money(sums.hoje);
+  document.getElementById('selecionadasTotal').textContent=money(totalSelecionadas);
+}
+
+function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function persist(){localStorage.setItem('controle_despesas_' + controleAtual,JSON.stringify(data));render();}
+function trocarControle(){
+  controleAtual=document.getElementById('controleSelect').value;
+  localStorage.setItem('controle_atual',controleAtual);
+  data=JSON.parse(localStorage.getItem('controle_despesas_' + controleAtual)) || dadosOriginais[controleAtual] || [];
+  editing=-1;
+  selectedExpenses.clear();
+  render();
+}
+function nomeControle(){
+  const found = listaControles.find(c => c.id === controleAtual);
+  return found ? found.nome : 'Geral';
+}
+
+function openModal(i=-1){editing=i;document.getElementById('modal').classList.add('open');document.getElementById('modalTitle').textContent=i<0?'Nova despesa':'Editar despesa';
+if(i>=0){let x=data[i];fFornecedor.value=x.fornecedor;fValor.value=x.valor;fVenc.value=x.vencimento;fPag.value=x.dataPagamento||''}else{fFornecedor.value='';fValor.value='';fVenc.value=today();fPag.value=''}}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+function save(){let x={fornecedor:fFornecedor.value.trim(),valor:Number(fValor.value||0),vencimento:fVenc.value,dataPagamento:fPag.value||''};if(!x.fornecedor||!x.vencimento){alert('Preencha fornecedor e vencimento.');return}if(editing<0)data.push(x);else data[editing]=x;persist();closeModal();}
+function edit(i){openModal(i)}
+function pay(i){data[i].dataPagamento=today();persist();}
+function del(i){if(confirm('Excluir esta despesa?')){selectedExpenses.delete(i);data.splice(i,1);persist();}}
+function resetData(){
+  if(confirm('Restaurar os dados deste controle?')){
+    data=JSON.parse(JSON.stringify(dadosOriginais[controleAtual] || []));
+    selectedExpenses.clear();
+    persist();
+  }
+}
+function limparPeriodo(){
+  document.getElementById('periodoDe').value='';
+  document.getElementById('periodoAte').value='';
+  render();
+}
+function toggleExpense(i, checked){
+  if(checked) selectedExpenses.add(i);
+  else selectedExpenses.delete(i);
+  updateSelectAllState();
+  render();
+}
+
+function toggleAllVisible(checked){
+  const q=document.getElementById('search').value.toLowerCase();
+  const filters=getStatusFilters();
+  const de=document.getElementById('periodoDe').value;
+  const ate=document.getElementById('periodoAte').value;
+  const rows=data.map((x,i)=>({...x,i,s:status(x)}))
+    .filter(x=>(!q||x.fornecedor.toLowerCase().includes(q)) &&
+      (filters.length===0||filters.includes(x.s)) &&
+      (!de || (x.vencimento||'')>=de) &&
+      (!ate || (x.vencimento||'')<=ate));
+  rows.forEach(x=>checked ? selectedExpenses.add(x.i) : selectedExpenses.delete(x.i));
+  render();
+}
+
+function selectAllVisible(){ toggleAllVisible(true); }
+function clearSelected(){ selectedExpenses.clear(); render(); }
+
+function updateSelectAllState(){
+  const master=document.getElementById('selectAll');
+  if(!master) return;
+  const checks=[...document.querySelectorAll('.expenseCheck')];
+  master.checked=checks.length>0 && checks.every(c=>c.checked);
+  master.indeterminate=checks.some(c=>c.checked) && !master.checked;
+}
+
+function getSelectedRows(){
+  return [...selectedExpenses]
+    .filter(i=>data[i])
+    .map(i=>({...data[i],i,s:status(data[i])}))
+    .sort((a,b)=>(a.vencimento||'').localeCompare(b.vencimento||''));
+}
+
+function exportSelectedPDF(){
+  const rows=getSelectedRows();
+  if(rows.length===0){
+    alert('Marque pelo menos uma despesa para exportar.');
+    return;
+  }
+
+  const oldTitle=document.title;
+  document.title='Despesas selecionadas - '+nomeControle();
+  const tbody=document.getElementById('tbody');
+  const originalHTML=tbody.innerHTML;
+
+  tbody.innerHTML=rows.map(x=>`<tr>
+    <td style="text-align:center">✓</td>
+    <td>${esc(x.fornecedor)}</td>
+    <td>${money(x.valor)}</td>
+    <td>${fmtDate(x.vencimento)}</td>
+    <td>${fmtDate(x.dataPagamento)}</td>
+    <td><span class="status ${x.s}">${label(x.s)}</span></td>
+    <td></td>
+  </tr>`).join('');
+
+  document.body.classList.add('print-only-selected');
+  window.print();
+  setTimeout(()=>{
+    document.body.classList.remove('print-only-selected');
+    tbody.innerHTML=originalHTML;
+    document.title=oldTitle;
+    updateSelectAllState();
+  },500);
+}
+
+function exportPDF(){
+  const oldTitle=document.title;
+  document.title='Controle de Despesas - '+nomeControle();
+  const rows=data.map((x,i)=>({...x,i,s:status(x)}))
+    .filter(x=>{const q=document.getElementById('search').value.toLowerCase();const filters=getStatusFilters();const de=document.getElementById('periodoDe').value;const ate=document.getElementById('periodoAte').value;return (!q||x.fornecedor.toLowerCase().includes(q))&&(filters.length===0||filters.includes(x.s))&&(!de||(x.vencimento||'')>=de)&&(!ate||(x.vencimento||'')<=ate)})
+    .sort((a,b)=>(a.vencimento||'').localeCompare(b.vencimento||''));
+  const tbody=document.getElementById('tbody');
+  const originalHTML=tbody.innerHTML;
+  tbody.innerHTML=rows.map(x=>`<tr><td></td><td>${esc(x.fornecedor)}</td><td>${money(x.valor)}</td><td>${fmtDate(x.vencimento)}</td><td>${fmtDate(x.dataPagamento)}</td><td><span class="status ${x.s}">${label(x.s)}</span></td><td></td></tr>`).join('');
+  window.print();
+  setTimeout(()=>{tbody.innerHTML=originalHTML;document.title=oldTitle;},500);
+}
+function exportCSV(){const q=document.getElementById('search').value.toLowerCase();const filters=getStatusFilters();const de=document.getElementById('periodoDe').value;const ate=document.getElementById('periodoAte').value;const filtered=data.filter(x=>(!q||x.fornecedor.toLowerCase().includes(q))&&(filters.length===0||filters.includes(status(x)))&&(!de||(x.vencimento||'')>=de)&&(!ate||(x.vencimento||'')<=ate));let lines=[['Fornecedor','Valor','Vencimento','Data de Pagamento','Situação'],...filtered.map(x=>[x.fornecedor,x.valor.toFixed(2).replace('.',','),fmtDate(x.vencimento),fmtDate(x.dataPagamento),label(status(x))])];let csv=lines.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(';')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='controle_despesas.csv';a.click();}
+
+render();
+</script>
+</body></html>
