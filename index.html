@@ -8,6 +8,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 
+  <!-- SDKs do Firebase (Versão Compatível via CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
     body { background-color: #0b1325; color: #ffffff; padding: 20px; }
@@ -100,7 +104,7 @@
   <div class="header-top">
     <div class="title-section">
       <h1>Controle de Despesas</h1>
-      <div class="sync-status">Sincronização <span class="sync-badge" id="status-sinc">☁️ Carregando...</span></div>
+      <div class="sync-status">Sincronização <span class="sync-badge" id="status-sinc">☁️ Conectando...</span></div>
     </div>
     <div class="top-buttons">
       <button class="btn-top" onclick="abrirModalControles()">⚙ Gerenciar Controles</button>
@@ -256,6 +260,21 @@
   </div>
 
   <script>
+    // Configuração do Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyCo2ugFP18ReX5QQWsqV1Wizpdd4P7ULnY",
+      authDomain: "controle-despesas-f9142.firebaseapp.com",
+      databaseURL: "https://controle-despesas-f9142-default-rtdb.firebaseio.com",
+      projectId: "controle-despesas-f9142",
+      storageBucket: "controle-despesas-f9142.firebasestorage.app",
+      messagingSenderId: "295571653230",
+      appId: "1:295571653230:web:712507375fd8783c39dc7f",
+      measurementId: "G-Q9TPTV88CQ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
     var linhaEmEdicao = null;
     var controles = ["Romerio", "Fazenda Boa Esperança", "Fazenda Alvorada"];
     var ordensColuna = { 1: true, 2: true, 3: true, 4: true };
@@ -268,73 +287,48 @@
     }
 
     window.addEventListener('DOMContentLoaded', function() {
-      carregarDadosPlanilha();
+      iniciarOuvintesFirebase();
     });
 
-    function carregarDadosPlanilha() {
-      atualizarStatusSync("☁️ Sincronizando...", "#d97706");
-      
-      if (typeof google !== 'undefined' && google.script && google.script.run) {
-        var runner = google.script.run
-          .withSuccessHandler(function(resposta) {
-            if (resposta && resposta.despesas) {
-              if (resposta.controles && resposta.controles.length > 0) {
-                controles = resposta.controles;
-              }
-              
-              var tbody = document.getElementById('tabela-corpo');
-              tbody.innerHTML = '';
-              resposta.despesas.forEach(function(item) { criarLinhaTabela(item); });
-              
-              atualizarSelectsControles();
-              filtrarDespesas();
-              atualizarStatusSync("✓ Salvo na Planilha", "#38ef7d");
-            }
-          })
-          .withFailureHandler(function(err) {
-            console.error(err);
-            atualizarStatusSync("✕ Erro ao carregar", "#e53e3e");
-          });
+    function iniciarOuvintesFirebase() {
+      atualizarStatusSync("☁️ Conectando...", "#d97706");
 
-        runner.obterDadosPlanilha();
-      } else {
-        carregarDadosLocalStorage();
-      }
-    }
-
-    function salvarDadosNaPlanilha() {
-      atualizarStatusSync("☁️ Salvando...", "#d97706");
-      
-      var despesas = [];
-      document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
-        var id = tr.dataset.id;
-        var controle = tr.dataset.controle;
-        var status = tr.dataset.status;
-        var anexo = tr.dataset.anexo || "";
-        var fornecedor = tr.cells[1].innerText.trim();
-        var valor = extrairValorNumerico(tr.cells[2].innerText);
-        var vencimento = formatarParaInputDate(tr.cells[3].innerText.trim());
-        var pagamento = formatarParaInputDate(tr.cells[4].innerText.trim());
-
-        despesas.push({ id: id, controle: controle, fornecedor: fornecedor, valor: valor, vencimento: vencimento, pagamento: pagamento, status: status, anexo: anexo });
+      // Carregar/Escutar Controles
+      database.ref('controles').on('value', function(snapshot) {
+        var dados = snapshot.val();
+        if (dados && Array.isArray(dados)) {
+          controles = dados;
+        } else if (!dados) {
+          database.ref('controles').set(controles);
+        }
+        atualizarSelectsControles();
+        renderizarListaControlesModal();
       });
 
-      if (typeof google !== 'undefined' && google.script && google.script.run) {
-        var runner = google.script.run
-          .withSuccessHandler(function() {
-            atualizarStatusSync("✓ Salvo na Planilha", "#38ef7d");
-          })
-          .withFailureHandler(function(err) {
-            console.error(err);
-            atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
-          });
+      // Carregar/Escutar Despesas em Tempo Real
+      database.ref('despesas').on('value', function(snapshot) {
+        var dados = snapshot.val();
+        var tbody = document.getElementById('tabela-corpo');
+        tbody.innerHTML = '';
 
-        runner.salvarDadosPlanilha(despesas, controles);
-      } else {
-        localStorage.setItem('app_controles', JSON.stringify(controles));
-        localStorage.setItem('app_despesas_v2', JSON.stringify(despesas));
-        atualizarStatusSync("✓ Salvo Localmente", "#38ef7d");
-      }
+        if (dados) {
+          Object.keys(dados).forEach(function(key) {
+            var item = dados[key];
+            item.id = key;
+            criarLinhaTabela(item);
+          });
+        }
+
+        filtrarDespesas();
+        atualizarStatusSync("✓ Online (Firebase)", "#38ef7d");
+      }, function(error) {
+        console.error(error);
+        atualizarStatusSync("✕ Erro no Banco", "#e53e3e");
+      });
+    }
+
+    function salvarControlesNoFirebase() {
+      database.ref('controles').set(controles);
     }
 
     function atualizarStatusSync(texto, cor) {
@@ -343,22 +337,6 @@
         elem.innerText = texto;
         elem.style.color = cor;
       }
-    }
-
-    function carregarDadosLocalStorage() {
-      var controlesSalvos = localStorage.getItem('app_controles');
-      if (controlesSalvos) controles = JSON.parse(controlesSalvos);
-
-      var despesasSalvas = localStorage.getItem('app_despesas_v2') || localStorage.getItem('app_despesas');
-      var dadosParaCarregar = despesasSalvas ? JSON.parse(despesasSalvas) : [];
-
-      var tbody = document.getElementById('tabela-corpo');
-      tbody.innerHTML = '';
-      dadosParaCarregar.forEach(function(item) { criarLinhaTabela(item); });
-
-      atualizarSelectsControles();
-      filtrarDespesas();
-      atualizarStatusSync("✓ Modo Offline", "#a0aec0");
     }
 
     function calcularStatusAutomatico(vencimentoIso, statusAtual) {
@@ -377,7 +355,7 @@
       
       var statusReal = calcularStatusAutomatico(item.vencimento, item.status);
 
-      tr.dataset.id = item.id || Date.now().toString();
+      tr.dataset.id = item.id;
       tr.dataset.controle = item.controle;
       tr.dataset.status = statusReal;
       tr.dataset.anexo = item.anexo || "";
@@ -444,8 +422,6 @@
         var icone = document.getElementById('sort-icon-' + i);
         if (icone) icone.innerText = (i === indiceColuna) ? (ascendente ? '▲' : '▼') : '↕';
       }
-      
-      salvarDadosNaPlanilha();
     }
 
     function converterDataParaISO(dataStr) {
@@ -507,7 +483,7 @@
       input.value = '';
       renderizarListaControlesModal();
       atualizarSelectsControles();
-      salvarDadosNaPlanilha();
+      salvarControlesNoFirebase();
     }
 
     function editarNomeControle(index) {
@@ -515,13 +491,7 @@
       var novo = prompt('Novo nome para o controle:', antigo);
       if (novo && novo.trim() !== '') {
         controles[index] = novo.trim();
-        document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
-          if (tr.dataset.controle === antigo) tr.dataset.controle = novo.trim();
-        });
-        renderizarListaControlesModal();
-        atualizarSelectsControles();
-        filtrarDespesas();
-        salvarDadosNaPlanilha();
+        salvarControlesNoFirebase();
       }
     }
 
@@ -530,10 +500,7 @@
       var controle = controles[index];
       if (confirm('Deseja remover o controle "' + controle + '"?')) {
         controles.splice(index, 1);
-        renderizarListaControlesModal();
-        atualizarSelectsControles();
-        filtrarDespesas();
-        salvarDadosNaPlanilha();
+        salvarControlesNoFirebase();
       }
     }
 
@@ -557,7 +524,6 @@
     function formatarParaTabelaDate(dataVal) {
       if (!dataVal || dataVal === '-') return '-';
 
-      // Se estiver no formato AAAA-MM-DD
       if (typeof dataVal === 'string' && dataVal.indexOf('-') !== -1) {
         var partesIso = dataVal.split('T')[0].split('-');
         if (partesIso.length === 3) {
@@ -565,7 +531,6 @@
         }
       }
 
-      // Se estiver no formato DD/MM/AAAA
       if (typeof dataVal === 'string' && dataVal.indexOf('/') !== -1) {
         return dataVal;
       }
@@ -630,47 +595,26 @@
           statusCalculado = calcularStatusAutomatico(novoVencimentoIso, novaSituacao);
         }
 
+        var dadosDespesa = {
+          controle: novoControle,
+          fornecedor: novoFornecedor,
+          valor: valorNumerico,
+          vencimento: novoVencimentoIso,
+          pagamento: novoPagamentoIso || "",
+          status: statusCalculado,
+          anexo: anexoBase64 || ""
+        };
+
+        atualizarStatusSync("☁️ Salvando...", "#d97706");
+
         if (!linhaEmEdicao) {
-          criarLinhaTabela({
-            id: Date.now().toString(),
-            controle: novoControle,
-            fornecedor: novoFornecedor,
-            valor: valorNumerico,
-            vencimento: novoVencimentoIso,
-            pagamento: novoPagamentoIso,
-            status: statusCalculado,
-            anexo: anexoBase64
-          });
+          database.ref('despesas').push(dadosDespesa);
         } else {
-          linhaEmEdicao.dataset.controle = novoControle;
-          linhaEmEdicao.dataset.status = statusCalculado;
-          linhaEmEdicao.dataset.anexo = anexoBase64;
-          linhaEmEdicao.cells[1].innerText = novoFornecedor;
-          
-          linhaEmEdicao.cells[1].className = '';
-          if (statusCalculado === 'VENCIDA') linhaEmEdicao.cells[1].className = 'texto-vencido';
-          if (statusCalculado === 'VENCE HOJE') linhaEmEdicao.cells[1].className = 'texto-vence-hoje';
-
-          linhaEmEdicao.cells[2].innerText = valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-          linhaEmEdicao.cells[3].innerText = formatarParaTabelaDate(novoVencimentoIso);
-          linhaEmEdicao.cells[4].innerText = statusCalculado === 'PAGA' ? formatarParaTabelaDate(novoPagamentoIso) : '-';
-          linhaEmEdicao.cells[6].innerHTML = anexoBase64 ? '<a href="' + anexoBase64 + '" target="_blank" class="anexo-link" title="Visualizar Anexo">📎</a>' : '-';
-
-          var tdSituacao = linhaEmEdicao.cells[5];
-          if (statusCalculado === 'PAGA') {
-            tdSituacao.innerHTML = '<span class="badge-status badge-paga">PAGA</span>';
-          } else if (statusCalculado === 'VENCIDA') {
-            tdSituacao.innerHTML = '<span class="badge-status badge-vencida">VENCIDA</span>';
-          } else if (statusCalculado === 'VENCE HOJE') {
-            tdSituacao.innerHTML = '<span class="badge-status badge-vence-hoje">VENCE HOJE</span>';
-          } else {
-            tdSituacao.innerHTML = '<span class="badge-status badge-aberto">EM ABERTO</span>';
-          }
+          var idFirebase = linhaEmEdicao.dataset.id;
+          database.ref('despesas/' + idFirebase).update(dadosDespesa);
         }
 
         fecharModalEdicao();
-        filtrarDespesas();
-        salvarDadosNaPlanilha();
       };
 
       var anexoBase64 = linhaEmEdicao ? (linhaEmEdicao.dataset.anexo || "") : "";
@@ -696,9 +640,8 @@
     function excluirDespesa(botao) {
       if (confirm('Tem certeza que deseja excluir esta despesa?')) {
         var tr = botao.closest('tr');
-        tr.remove();
-        filtrarDespesas();
-        salvarDadosNaPlanilha();
+        var idFirebase = tr.dataset.id;
+        database.ref('despesas/' + idFirebase).remove();
       }
     }
 
@@ -828,17 +771,16 @@
       var hojeIso = new Date().toISOString().split('T')[0];
 
       if (confirm('Deseja marcar as ' + selecionadas.length + ' despesas selecionadas como PAGAS com a data de hoje (' + formatarParaTabelaDate(hojeIso) + ')?')) {
+        atualizarStatusSync("☁️ Salvando...", "#d97706");
+        
         selecionadas.forEach(function(cb) {
           var tr = cb.closest('tr');
-          tr.dataset.status = 'PAGA';
-          tr.cells[1].className = '';
-          tr.cells[4].innerText = formatarParaTabelaDate(hojeIso);
-          tr.cells[5].innerHTML = '<span class="badge-status badge-paga">PAGA</span>';
-          cb.checked = false;
+          var idFirebase = tr.dataset.id;
+          database.ref('despesas/' + idFirebase).update({
+            status: 'PAGA',
+            pagamento: hojeIso
+          });
         });
-
-        filtrarDespesas();
-        salvarDadosNaPlanilha();
       }
     }
 
