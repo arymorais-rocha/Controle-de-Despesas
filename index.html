@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Controle de Despesas</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
+    body { background-color: #0b1325; color: #ffffff; padding: 20px; }
+    
+    .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .title-section h1 { font-size: 24px; font-weight: bold; }
+    .sync-status { font-size: 12px; color: #a0aec0; margin-top: 4px; }
+    .sync-badge { background-color: #1c3d32; color: #38ef7d; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+
+    .top-buttons { display: flex; gap: 10px; }
+    .btn-top { background-color: #1e293b; color: #fff; border: 1px solid #334155; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+    .btn-top:hover { background-color: #334155; }
+    .btn-top-primary { background-color: #0066ff; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
+    .btn-top-primary:hover { background-color: #0052cc; }
+
+    .cards-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+    .card { background: #ffffff; color: #1e293b; padding: 15px; border-radius: 8px; }
+    .card-title { font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 5px; }
+    .card-value { font-size: 20px; font-weight: bold; }
+
+    .filter-bar { background-color: #131f37; padding: 12px; border-radius: 8px; margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .filter-select, .filter-input { background: #1e293b; border: 1px solid #334155; color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+    .filter-input-search { flex: 1; }
+
+    .action-bar { background-color: #131f37; padding: 10px 12px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .checkbox-filters { display: flex; gap: 15px; align-items: center; font-size: 13px; flex-wrap: wrap; }
+    .checkbox-filters label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    .btn-desmarcar { background: none; border: none; color: #a0aec0; cursor: pointer; font-size: 12px; text-decoration: underline; margin-left: 15px; }
+
+    .btn-group-right { display: flex; gap: 8px; align-items: center; }
+    .btn-pagar-selecionadas { background-color: #28a745; color: #fff; border: none; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+    .btn-pagar-selecionadas:hover { background-color: #218838; }
+    .btn-pdf { background-color: #dc3545; color: #fff; border: none; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; }
+    .btn-pdf:hover { background-color: #c82333; }
+    .btn-csv { background-color: #1e293b; color: #fff; border: 1px solid #334155; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; }
+
+    .table-container { background: #ffffff; border-radius: 8px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; color: #1e293b; font-size: 13px; }
+    th { background: #ffffff; text-align: left; padding: 12px; border-bottom: 2px solid #edf2f7; color: #4a5568; font-weight: 600; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background-color: #f8fafc; color: #0066ff; }
+    td { padding: 12px; border-bottom: 1px solid #edf2f7; }
+    
+    .badge-status { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; display: inline-block; }
+    .badge-vencida { background-color: #ffd6d6; color: #e53e3e; animation: piscar-alerta 1s infinite alternate; }
+    .badge-vence-hoje { background-color: #fef3c7; color: #d97706; animation: piscar-alerta 1.2s infinite alternate; }
+    .badge-aberto { background-color: #e0e7ff; color: #4338ca; }
+    .badge-paga { background-color: #d1fae5; color: #047857; }
+
+    .texto-vencido { color: #e53e3e; font-weight: bold; animation: piscar-texto 1s infinite alternate; }
+    .texto-vence-hoje { color: #d97706; font-weight: bold; animation: piscar-texto 1.2s infinite alternate; }
+
+    @keyframes piscar-alerta {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; transform: scale(1.05); }
+    }
+
+    @keyframes piscar-texto {
+      0% { opacity: 1; }
+      50% { opacity: 0.4; }
+      100% { opacity: 1; }
+    }
+
+    .btn-action-icon { background: #1e293b; color: #fff; border: none; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; margin-right: 2px; }
+    .btn-action-icon:hover { background: #334155; }
+    .anexo-link { color: #0066ff; text-decoration: none; font-size: 16px; cursor: pointer; }
+
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
+    .modal-overlay.active { display: flex; }
+    .modal-box { background: #131f37; border-radius: 10px; width: 100%; max-width: 500px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); color: #fff; border: 1px solid #334155; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+    .modal-header h2 { font-size: 18px; color: #fff; font-weight: bold; }
+    .modal-close { background: none; border: none; color: #a0aec0; font-size: 20px; cursor: pointer; }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; font-size: 12px; font-weight: bold; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase; }
+    .form-group input, .form-group select { width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; padding: 10px; border-radius: 6px; font-size: 14px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; border-top: 1px solid #334155; padding-top: 15px; }
+    .btn-cancelar { background: #334155; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .btn-salvar { background: #0066ff; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
+    .btn-salvar:hover { background: #0052cc; }
+
+    .controles-list { list-style: none; margin-bottom: 15px; max-height: 180px; overflow-y: auto; }
+    .controles-list li { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #1e293b; border-radius: 6px; margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+
+  <div class="header-top">
+    <div class="title-section">
+      <h1>Controle de Despesas</h1>
+      <div class="sync-status">Sincronização <span class="sync-badge" id="status-sinc">☁️ Carregando...</span></div>
+    </div>
+    <div class="top-buttons">
+      <button class="btn-top" onclick="abrirModalControles()">⚙ Gerenciar Controles</button>
+      <button class="btn-top-primary" onclick="abrirModalNovaDespesa()">+ Nova Despesa</button>
+    </div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-title">A Vencer</div>
+      <div class="card-value" id="card-a-vencer">R$ 0,00</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Vencidas</div>
+      <div class="card-value" id="card-vencidas">R$ 0,00</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Vence Hoje</div>
+      <div class="card-value" id="card-vence-hoje">R$ 0,00</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Total Selecionadas</div>
+      <div class="card-value" id="card-total-selecionadas">R$ 0,00</div>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <select class="filter-select" id="select-controle" onchange="filtrarDespesas()"></select>
+    <input type="text" id="input-busca" class="filter-input filter-input-search" placeholder="Pesquisar fornecedor..." onkeyup="filtrarDespesas()">
+    <span style="font-size: 12px; color: #a0aec0;">Mês:</span>
+    <input type="month" id="filtro-mes" class="filter-input" onchange="filtrarPorMes()">
+    <span style="font-size: 12px; color: #a0aec0;">De:</span>
+    <input type="date" id="data-de" class="filter-input" onchange="filtrarDespesas()">
+    <span style="font-size: 12px; color: #a0aec0;">Até:</span>
+    <input type="date" id="data-ate" class="filter-input" onchange="filtrarDespesas()">
+    <button class="btn-top" onclick="limparFiltros()">✕</button>
+  </div>
+
+  <div class="action-bar">
+    <div class="checkbox-filters">
+      <label><input type="checkbox" class="filter-status" value="VENCE HOJE" onchange="filtrarDespesas()"> Vence Hoje</label>
+      <label><input type="checkbox" class="filter-status" value="VENCIDA" onchange="filtrarDespesas()"> Vencidas</label>
+      <label><input type="checkbox" class="filter-status" value="EM ABERTO" checked onchange="filtrarDespesas()"> Em Aberto</label>
+      <label><input type="checkbox" class="filter-status" id="chk-pagas" value="PAGA" onchange="filtrarDespesas()"> Pagas</label>
+      <label><input type="checkbox" class="filter-status" id="chk-todas" value="TODAS" onchange="marcarTodasStatus(this)"> Todas</label>
+      <button class="btn-desmarcar" onclick="desmarcarTodosStatus()">Desmarcar Tudo</button>
+    </div>
+    <div class="btn-group-right">
+      <button type="button" class="btn-pagar-selecionadas" onclick="pagarSelecionadasHoje()">✓ Pagar Selecionadas</button>
+      <button type="button" class="btn-pdf" onclick="gerarPDF()">📄 PDF Selecionadas</button>
+      <button type="button" class="btn-csv" onclick="exportarCSV()">CSV</button>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 30px;"><input type="checkbox" id="check-master" onclick="toggleSelectAll(this)"></th>
+          <th class="sortable" onclick="ordenarTabela(1, 'texto')">Fornecedor <span id="sort-icon-1">↕</span></th>
+          <th class="sortable" onclick="ordenarTabela(2, 'valor')">Valor <span id="sort-icon-2">↕</span></th>
+          <th class="sortable" onclick="ordenarTabela(3, 'data')">Vencimento <span id="sort-icon-3">↕</span></th>
+          <th class="sortable" onclick="ordenarTabela(4, 'data')">Pagamento <span id="sort-icon-4">↕</span></th>
+          <th>Situação</th>
+          <th>Anexo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tabela-corpo"></tbody>
+    </table>
+  </div>
+
+  <!-- MODAL DE EDIÇÃO / CRIAÇÃO DE DESPESA -->
+  <div class="modal-overlay" id="modal-edicao">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="modal-edicao-titulo">Editar Despesa</h2>
+        <button class="modal-close" onclick="fecharModalEdicao()">✕</button>
+      </div>
+      <form id="form-editar" onsubmit="salvarEdicao(event)">
+        <div class="form-group">
+          <label for="edit-controle">Controle / Conta</label>
+          <select id="edit-controle" required></select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-fornecedor">Fornecedor / Descrição</label>
+          <input type="text" id="edit-fornecedor" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="edit-valor">Valor (R$)</label>
+            <input type="text" id="edit-valor" placeholder="0,00" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-vencimento">Data Vencimento</label>
+            <input type="date" id="edit-vencimento" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="edit-situacao">Situação</label>
+            <select id="edit-situacao" onchange="aoMudarSituacaoModal()">
+              <option value="EM ABERTO">EM ABERTO</option>
+              <option value="VENCIDA">VENCIDA</option>
+              <option value="VENCE HOJE">VENCE HOJE</option>
+              <option value="PAGA">PAGA</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="edit-pagamento">Data Pagamento (Retroativa ou Atual)</label>
+            <input type="date" id="edit-pagamento">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-anexo">Anexo (PDF ou Imagem)</label>
+          <input type="file" id="edit-anexo" accept="image/*,application/pdf">
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-cancelar" onclick="fecharModalEdicao()">Cancelar</button>
+          <button type="submit" class="btn-salvar">Salvar Alterações</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL GERENCIAR CONTROLES -->
+  <div class="modal-overlay" id="modal-controles">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Gerenciar Controles</h2>
+        <button class="modal-close" onclick="fecharModalControles()">✕</button>
+      </div>
+      
+      <ul class="controles-list" id="lista-controles-modal"></ul>
+
+      <div class="form-group">
+        <label for="novo-controle-nome">Adicionar Novo Controle</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="novo-controle-nome" placeholder="Nome do Controle (ex: Fazenda Nova)">
+          <button type="button" class="btn-salvar" onclick="adicionarNovoControle()">Adicionar</button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-cancelar" onclick="fecharModalControles()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var linhaEmEdicao = null;
+    var controles = ["Romerio", "Fazenda Boa Esperança", "Fazenda Alvorada"];
+    var ordensColuna = { 1: true, 2: true, 3: true, 4: true };
+
+    function extrairValorNumerico(texto) {
+      if (!texto) return 0;
+      var limpo = texto.replace('R$', '').trim();
+      limpo = limpo.split('.').join('').replace(',', '.');
+      return parseFloat(limpo) || 0;
+    }
+
+    window.addEventListener('DOMContentLoaded', function() {
+      carregarDadosPlanilha();
+    });
+
+    function carregarDadosPlanilha() {
+      atualizarStatusSync("☁️ Sincronizando...", "#d97706");
+      
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        var runner = google.script.run
+          .withSuccessHandler(function(resposta) {
+            if (resposta && resposta.despesas) {
+              if (resposta.controles && resposta.controles.length > 0) {
+                controles = resposta.controles;
+              }
+              
+              var tbody = document.getElementById('tabela-corpo');
+              tbody.innerHTML = '';
+              resposta.despesas.forEach(function(item) { criarLinhaTabela(item); });
+              
+              atualizarSelectsControles();
+              filtrarDespesas();
+              atualizarStatusSync("✓ Salvo na Planilha", "#38ef7d");
+            }
+          })
+          .withFailureHandler(function(err) {
+            console.error(err);
+            atualizarStatusSync("✕ Erro ao carregar", "#e53e3e");
+          });
+
+        runner.obterDadosPlanilha();
+      } else {
+        carregarDadosLocalStorage();
+      }
+    }
+
+    function salvarDadosNaPlanilha() {
+      atualizarStatusSync("☁️ Salvando...", "#d97706");
+      
+      var despesas = [];
+      document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
+        var id = tr.dataset.id;
+        var controle = tr.dataset.controle;
+        var status = tr.dataset.status;
+        var anexo = tr.dataset.anexo || "";
+        var fornecedor = tr.cells[1].innerText.trim();
+        var valor = extrairValorNumerico(tr.cells[2].innerText);
+        var vencimento = formatarParaInputDate(tr.cells[3].innerText.trim());
+        var pagamento = formatarParaInputDate(tr.cells[4].innerText.trim());
+
+        despesas.push({ id: id, controle: controle, fornecedor: fornecedor, valor: valor, vencimento: vencimento, pagamento: pagamento, status: status, anexo: anexo });
+      });
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        var runner = google.script.run
+          .withSuccessHandler(function() {
+            atualizarStatusSync("✓ Salvo na Planilha", "#38ef7d");
+          })
+          .withFailureHandler(function(err) {
+            console.error(err);
+            atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
+          });
+
+        runner.salvarDadosPlanilha(despesas, controles);
+      } else {
+        localStorage.setItem('app_controles', JSON.stringify(controles));
+        localStorage.setItem('app_despesas_v2', JSON.stringify(despesas));
+        atualizarStatusSync("✓ Salvo Localmente", "#38ef7d");
+      }
+    }
+
+    function atualizarStatusSync(texto, cor) {
+      var elem = document.getElementById('status-sinc');
+      if (elem) {
+        elem.innerText = texto;
+        elem.style.color = cor;
+      }
+    }
+
+    function carregarDadosLocalStorage() {
+      var controlesSalvos = localStorage.getItem('app_controles');
+      if (controlesSalvos) controles = JSON.parse(controlesSalvos);
+
+      var despesasSalvas = localStorage.getItem('app_despesas_v2') || localStorage.getItem('app_despesas');
+      var dadosParaCarregar = despesasSalvas ? JSON.parse(despesasSalvas) : [];
+
+      var tbody = document.getElementById('tabela-corpo');
+      tbody.innerHTML = '';
+      dadosParaCarregar.forEach(function(item) { criarLinhaTabela(item); });
+
+      atualizarSelectsControles();
+      filtrarDespesas();
+      atualizarStatusSync("✓ Modo Offline", "#a0aec0");
+    }
+
+    function calcularStatusAutomatico(vencimentoIso, statusAtual) {
+      if (statusAtual === 'PAGA') return 'PAGA';
+      var hoje = new Date().toISOString().split('T')[0];
+      if (!vencimentoIso) return statusAtual;
+
+      if (vencimentoIso < hoje) return 'VENCIDA';
+      if (vencimentoIso === hoje) return 'VENCE HOJE';
+      return 'EM ABERTO';
+    }
+
+    function criarLinhaTabela(item) {
+      var tbody = document.getElementById('tabela-corpo');
+      var tr = document.createElement('tr');
+      
+      var statusReal = calcularStatusAutomatico(item.vencimento, item.status);
+
+      tr.dataset.id = item.id || Date.now().toString();
+      tr.dataset.controle = item.controle;
+      tr.dataset.status = statusReal;
+      tr.dataset.anexo = item.anexo || "";
+
+      var valorFormatado = (item.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      
+      var classeTexto = '';
+      var badgeHtml = '<span class="badge-status badge-aberto">EM ABERTO</span>';
+
+      if (statusReal === 'PAGA') {
+        badgeHtml = '<span class="badge-status badge-paga">PAGA</span>';
+      } else if (statusReal === 'VENCIDA') {
+        badgeHtml = '<span class="badge-status badge-vencida">VENCIDA</span>';
+        classeTexto = 'texto-vencido';
+      } else if (statusReal === 'VENCE HOJE') {
+        badgeHtml = '<span class="badge-status badge-vence-hoje">VENCE HOJE</span>';
+        classeTexto = 'texto-vence-hoje';
+      }
+
+      var colAnexo = item.anexo ? '<a href="' + item.anexo + '" target="_blank" class="anexo-link" title="Visualizar Anexo">📎</a>' : '-';
+
+      tr.innerHTML = '<td><input type="checkbox" class="check-item" onchange="atualizarSomaSelecionadas()"></td>' +
+        '<td class="' + classeTexto + '">' + item.fornecedor + '</td>' +
+        '<td>' + valorFormatado + '</td>' +
+        '<td>' + formatarParaTabelaDate(item.vencimento) + '</td>' +
+        '<td class="td-pagamento">' + (statusReal === 'PAGA' || item.pagamento ? formatarParaTabelaDate(item.pagamento) : '-') + '</td>' +
+        '<td class="td-situacao">' + badgeHtml + '</td>' +
+        '<td class="td-anexo">' + colAnexo + '</td>' +
+        '<td>' +
+          '<button class="btn-action-icon" onclick="abrirModalEdicao(this)" title="Editar Completo">✏️</button>' +
+          '<button class="btn-action-icon" onclick="excluirDespesa(this)" title="Excluir">🗑️</button>' +
+        '</td>';
+      tbody.appendChild(tr);
+    }
+
+    function ordenarTabela(indiceColuna, tipo) {
+      var tbody = document.getElementById('tabela-corpo');
+      var linhas = Array.from(tbody.querySelectorAll('tr'));
+      var ascendente = ordensColuna[indiceColuna];
+
+      linhas.sort(function(a, b) {
+        var valA = a.cells[indiceColuna].innerText.trim();
+        var valB = b.cells[indiceColuna].innerText.trim();
+
+        if (tipo === 'data') {
+          valA = converterDataParaISO(valA);
+          valB = converterDataParaISO(valB);
+        } else if (tipo === 'valor') {
+          valA = extrairValorNumerico(valA);
+          valB = extrairValorNumerico(valB);
+        }
+
+        if (valA === valB) return 0;
+        if (valA === '0000-00-00' || valA === '') return 1;
+        if (valB === '0000-00-00' || valB === '') return -1;
+
+        return ascendente ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+      });
+
+      ordensColuna[indiceColuna] = !ascendente;
+      linhas.forEach(function(linha) { tbody.appendChild(linha); });
+
+      for (var i = 1; i <= 4; i++) {
+        var icone = document.getElementById('sort-icon-' + i);
+        if (icone) icone.innerText = (i === indiceColuna) ? (ascendente ? '▲' : '▼') : '↕';
+      }
+      
+      salvarDadosNaPlanilha();
+    }
+
+    function converterDataParaISO(dataStr) {
+      if (!dataStr || dataStr === '-') return '0000-00-00';
+      var partes = dataStr.split('/');
+      return partes.length === 3 ? partes[2] + '-' + partes[1].padStart(2, '0') + '-' + partes[0].padStart(2, '0') : '0000-00-00';
+    }
+
+    function atualizarSelectsControles() {
+      var selectFiltro = document.getElementById('select-controle');
+      var selectForm = document.getElementById('edit-controle');
+      var valorFiltroAtual = selectFiltro.value || 'TODOS';
+      var valorFormAtual = selectForm.value;
+
+      selectFiltro.innerHTML = '<option value="TODOS">Todos os Controles</option>';
+      selectForm.innerHTML = '';
+
+      controles.forEach(function(c) {
+        selectFiltro.innerHTML += '<option value="' + c + '">' + c + '</option>';
+        selectForm.innerHTML += '<option value="' + c + '">' + c + '</option>';
+      });
+
+      selectFiltro.value = controles.includes(valorFiltroAtual) ? valorFiltroAtual : 'TODOS';
+      if (valorFormAtual && controles.includes(valorFormAtual)) {
+        selectForm.value = valorFormAtual;
+      }
+    }
+
+    function abrirModalControles() {
+      renderizarListaControlesModal();
+      document.getElementById('modal-controles').classList.add('active');
+    }
+
+    function fecharModalControles() {
+      document.getElementById('modal-controles').classList.remove('active');
+    }
+
+    function renderizarListaControlesModal() {
+      var lista = document.getElementById('lista-controles-modal');
+      lista.innerHTML = '';
+      controles.forEach(function(c, index) {
+        lista.innerHTML += '<li>' +
+            '<span>' + c + '</span>' +
+            '<div>' +
+              '<button class="btn-action-icon" onclick="editarNomeControle(' + index + ')">✏️</button>' +
+              '<button class="btn-action-icon" onclick="excluirControle(' + index + ')">🗑️</button>' +
+            '</div>' +
+          '</li>';
+      });
+    }
+
+    function adicionarNovoControle() {
+      var input = document.getElementById('novo-controle-nome');
+      var nome = input.value.trim();
+      if (!nome) return alert('Digite um nome válido.');
+      if (controles.includes(nome)) return alert('Este controle já existe.');
+
+      controles.push(nome);
+      input.value = '';
+      renderizarListaControlesModal();
+      atualizarSelectsControles();
+      salvarDadosNaPlanilha();
+    }
+
+    function editarNomeControle(index) {
+      var antigo = controles[index];
+      var novo = prompt('Novo nome para o controle:', antigo);
+      if (novo && novo.trim() !== '') {
+        controles[index] = novo.trim();
+        document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
+          if (tr.dataset.controle === antigo) tr.dataset.controle = novo.trim();
+        });
+        renderizarListaControlesModal();
+        atualizarSelectsControles();
+        filtrarDespesas();
+        salvarDadosNaPlanilha();
+      }
+    }
+
+    function excluirControle(index) {
+      if (controles.length <= 1) return alert('É necessário manter pelo menos um controle.');
+      var controle = controles[index];
+      if (confirm('Deseja remover o controle "' + controle + '"?')) {
+        controles.splice(index, 1);
+        renderizarListaControlesModal();
+        atualizarSelectsControles();
+        filtrarDespesas();
+        salvarDadosNaPlanilha();
+      }
+    }
+
+    function abrirModalNovaDespesa() {
+      linhaEmEdicao = null;
+      document.getElementById('modal-edicao-titulo').innerText = 'Nova Despesa';
+      document.getElementById('form-editar').reset();
+      document.getElementById('edit-situacao').value = 'EM ABERTO';
+      document.getElementById('modal-edicao').classList.add('active');
+    }
+
+    function formatarParaInputDate(dataStr) {
+      if (!dataStr || dataStr === '-') return '';
+      if (typeof dataStr === 'string' && dataStr.indexOf('/') !== -1) {
+        var partes = dataStr.split('/');
+        return partes.length === 3 ? partes[2] + '-' + partes[1].padStart(2, '0') + '-' + partes[0].padStart(2, '0') : '';
+      }
+      return dataStr;
+    }
+
+    function formatarParaTabelaDate(dataVal) {
+      if (!dataVal || dataVal === '-') return '-';
+
+      // Se estiver no formato AAAA-MM-DD
+      if (typeof dataVal === 'string' && dataVal.indexOf('-') !== -1) {
+        var partesIso = dataVal.split('T')[0].split('-');
+        if (partesIso.length === 3) {
+          return partesIso[2].padStart(2, '0') + '/' + partesIso[1].padStart(2, '0') + '/' + partesIso[0];
+        }
+      }
+
+      // Se estiver no formato DD/MM/AAAA
+      if (typeof dataVal === 'string' && dataVal.indexOf('/') !== -1) {
+        return dataVal;
+      }
+
+      return '-';
+    }
+
+    function abrirModalEdicao(botao) {
+      linhaEmEdicao = botao.closest('tr');
+      document.getElementById('modal-edicao-titulo').innerText = 'Editar Despesa';
+
+      var controle = linhaEmEdicao.dataset.controle;
+      var fornecedor = linhaEmEdicao.cells[1].innerText.trim();
+      var valorStr = linhaEmEdicao.cells[2].innerText.replace('R$', '').trim();
+      var vencimentoStr = linhaEmEdicao.cells[3].innerText.trim();
+      var pagamentoStr = linhaEmEdicao.cells[4].innerText.trim();
+      var status = linhaEmEdicao.dataset.status;
+
+      document.getElementById('edit-controle').value = controle;
+      document.getElementById('edit-fornecedor').value = fornecedor;
+      document.getElementById('edit-valor').value = valorStr;
+      document.getElementById('edit-vencimento').value = formatarParaInputDate(vencimentoStr);
+      document.getElementById('edit-pagamento').value = formatarParaInputDate(pagamentoStr);
+      document.getElementById('edit-situacao').value = status;
+      document.getElementById('edit-anexo').value = '';
+
+      document.getElementById('modal-edicao').classList.add('active');
+    }
+
+    function fecharModalEdicao() {
+      document.getElementById('modal-edicao').classList.remove('active');
+      linhaEmEdicao = null;
+    }
+
+    function aoMudarSituacaoModal() {
+      var situacao = document.getElementById('edit-situacao').value;
+      var inputPagamento = document.getElementById('edit-pagamento');
+      if (situacao === 'PAGA' && !inputPagamento.value) {
+        inputPagamento.value = new Date().toISOString().split('T')[0];
+      }
+    }
+
+    function salvarEdicao(event) {
+      event.preventDefault();
+
+      var novoControle = document.getElementById('edit-controle').value;
+      var novoFornecedor = document.getElementById('edit-fornecedor').value.trim();
+      var novoValorStr = document.getElementById('edit-valor').value.trim();
+      var novoVencimentoIso = document.getElementById('edit-vencimento').value;
+      var novaSituacao = document.getElementById('edit-situacao').value;
+      var novoPagamentoIso = document.getElementById('edit-pagamento').value;
+      var inputAnexo = document.getElementById('edit-anexo');
+
+      var valorNumerico = extrairValorNumerico(novoValorStr);
+      if (isNaN(valorNumerico)) return alert('Por favor, digite um valor numérico válido.');
+
+      var finalizarSalvar = function(anexoBase64) {
+        var statusCalculado = novaSituacao;
+        if (novoPagamentoIso && novoPagamentoIso !== '') {
+          statusCalculado = 'PAGA';
+        } else {
+          statusCalculado = calcularStatusAutomatico(novoVencimentoIso, novaSituacao);
+        }
+
+        if (!linhaEmEdicao) {
+          criarLinhaTabela({
+            id: Date.now().toString(),
+            controle: novoControle,
+            fornecedor: novoFornecedor,
+            valor: valorNumerico,
+            vencimento: novoVencimentoIso,
+            pagamento: novoPagamentoIso,
+            status: statusCalculado,
+            anexo: anexoBase64
+          });
+        } else {
+          linhaEmEdicao.dataset.controle = novoControle;
+          linhaEmEdicao.dataset.status = statusCalculado;
+          linhaEmEdicao.dataset.anexo = anexoBase64;
+          linhaEmEdicao.cells[1].innerText = novoFornecedor;
+          
+          linhaEmEdicao.cells[1].className = '';
+          if (statusCalculado === 'VENCIDA') linhaEmEdicao.cells[1].className = 'texto-vencido';
+          if (statusCalculado === 'VENCE HOJE') linhaEmEdicao.cells[1].className = 'texto-vence-hoje';
+
+          linhaEmEdicao.cells[2].innerText = valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+          linhaEmEdicao.cells[3].innerText = formatarParaTabelaDate(novoVencimentoIso);
+          linhaEmEdicao.cells[4].innerText = statusCalculado === 'PAGA' ? formatarParaTabelaDate(novoPagamentoIso) : '-';
+          linhaEmEdicao.cells[6].innerHTML = anexoBase64 ? '<a href="' + anexoBase64 + '" target="_blank" class="anexo-link" title="Visualizar Anexo">📎</a>' : '-';
+
+          var tdSituacao = linhaEmEdicao.cells[5];
+          if (statusCalculado === 'PAGA') {
+            tdSituacao.innerHTML = '<span class="badge-status badge-paga">PAGA</span>';
+          } else if (statusCalculado === 'VENCIDA') {
+            tdSituacao.innerHTML = '<span class="badge-status badge-vencida">VENCIDA</span>';
+          } else if (statusCalculado === 'VENCE HOJE') {
+            tdSituacao.innerHTML = '<span class="badge-status badge-vence-hoje">VENCE HOJE</span>';
+          } else {
+            tdSituacao.innerHTML = '<span class="badge-status badge-aberto">EM ABERTO</span>';
+          }
+        }
+
+        fecharModalEdicao();
+        filtrarDespesas();
+        salvarDadosNaPlanilha();
+      };
+
+      var anexoBase64 = linhaEmEdicao ? (linhaEmEdicao.dataset.anexo || "") : "";
+      if (inputAnexo.files && inputAnexo.files[0]) {
+        converterArquivoBase64(inputAnexo.files[0]).then(finalizarSalvar).catch(function(err) {
+          console.error(err);
+          finalizarSalvar(anexoBase64);
+        });
+      } else {
+        finalizarSalvar(anexoBase64);
+      }
+    }
+
+    function converterArquivoBase64(file) {
+      return new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function() { resolve(reader.result); };
+        reader.onerror = function(error) { reject(error); };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function excluirDespesa(botao) {
+      if (confirm('Tem certeza que deseja excluir esta despesa?')) {
+        var tr = botao.closest('tr');
+        tr.remove();
+        filtrarDespesas();
+        salvarDadosNaPlanilha();
+      }
+    }
+
+    function toggleSelectAll(masterCheckbox) {
+      var checkboxes = document.querySelectorAll('#tabela-corpo tr:not([style*="display: none"]) .check-item');
+      checkboxes.forEach(function(cb) { cb.checked = masterCheckbox.checked; });
+      atualizarSomaSelecionadas();
+    }
+
+    function marcarTodasStatus(checkboxMaster) {
+      var checkboxesStatus = document.querySelectorAll('.filter-status:not(#chk-todas)');
+      checkboxesStatus.forEach(function(cb) { cb.checked = checkboxMaster.checked; });
+      filtrarDespesas();
+    }
+
+    function desmarcarTodosStatus() {
+      var checkboxesStatus = document.querySelectorAll('.filter-status');
+      checkboxesStatus.forEach(function(cb) { cb.checked = false; });
+      filtrarDespesas();
+    }
+
+    function filtrarPorMes() {
+      var mesAno = document.getElementById('filtro-mes').value;
+      if (!mesAno) return;
+
+      var partes = mesAno.split('-');
+      var ano = partes[0];
+      var mes = partes[1];
+
+      var ultimoDia = new Date(ano, mes, 0).getDate();
+
+      document.getElementById('data-de').value = ano + '-' + mes + '-01';
+      document.getElementById('data-ate').value = ano + '-' + mes + '-' + String(ultimoDia).padStart(2, '0');
+
+      filtrarDespesas();
+    }
+
+    function limparFiltros() {
+      document.getElementById('select-controle').value = 'TODOS';
+      document.getElementById('input-busca').value = '';
+      document.getElementById('filtro-mes').value = '';
+      document.getElementById('data-de').value = '';
+      document.getElementById('data-ate').value = '';
+      
+      document.querySelectorAll('.filter-status').forEach(function(cb) {
+        cb.checked = (cb.value === 'EM ABERTO');
+      });
+      document.getElementById('chk-todas').checked = false;
+
+      filtrarDespesas();
+    }
+
+    function filtrarDespesas() {
+      var controleSelecionado = document.getElementById('select-controle').value;
+      var buscaTexto = document.getElementById('input-busca').value.toLowerCase();
+      var dataDe = document.getElementById('data-de').value;
+      var dataAte = document.getElementById('data-ate').value;
+
+      var statusSelecionados = Array.from(document.querySelectorAll('.filter-status:checked:not(#chk-todas)')).map(function(cb) { return cb.value; });
+
+      var linhas = document.querySelectorAll('#tabela-corpo tr');
+
+      linhas.forEach(function(tr) {
+        var controleRow = tr.dataset.controle;
+        var statusRow = tr.dataset.status;
+        var fornecedorRow = tr.cells[1].innerText.toLowerCase();
+        var vencimentoIso = converterDataParaISO(tr.cells[3].innerText.trim());
+
+        var matchControle = (controleSelecionado === 'TODOS' || controleRow === controleSelecionado);
+        var matchTexto = fornecedorRow.includes(buscaTexto);
+        var matchStatus = (statusSelecionados.length === 0 || statusSelecionados.includes(statusRow));
+        
+        var matchData = true;
+        if (dataDe && vencimentoIso < dataDe) matchData = false;
+        if (dataAte && vencimentoIso > dataAte) matchData = false;
+
+        if (matchControle && matchTexto && matchStatus && matchData) {
+          tr.style.display = '';
+        } else {
+          tr.style.display = 'none';
+          var cb = tr.querySelector('.check-item');
+          if (cb) cb.checked = false;
+        }
+      });
+
+      atualizarTotaisCards();
+      atualizarSomaSelecionadas();
+    }
+
+    function atualizarTotaisCards() {
+      var totalAVencer = 0;
+      var totalVencidas = 0;
+      var totalVenceHoje = 0;
+
+      document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
+        if (tr.style.display !== 'none') {
+          var status = tr.dataset.status;
+          var valor = extrairValorNumerico(tr.cells[2].innerText);
+
+          if (status === 'EM ABERTO') totalAVencer += valor;
+          if (status === 'VENCIDA') totalVencidas += valor;
+          if (status === 'VENCE HOJE') totalVenceHoje += valor;
+        }
+      });
+
+      document.getElementById('card-a-vencer').innerText = totalAVencer.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      document.getElementById('card-vencidas').innerText = totalVencidas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      document.getElementById('card-vence-hoje').innerText = totalVenceHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function atualizarSomaSelecionadas() {
+      var totalSelecionadas = 0;
+      var checkboxes = document.querySelectorAll('#tabela-corpo tr:not([style*="display: none"]) .check-item:checked');
+      
+      checkboxes.forEach(function(cb) {
+        var tr = cb.closest('tr');
+        totalSelecionadas += extrairValorNumerico(tr.cells[2].innerText);
+      });
+
+      document.getElementById('card-total-selecionadas').innerText = totalSelecionadas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function pagarSelecionadasHoje() {
+      var selecionadas = document.querySelectorAll('#tabela-corpo tr:not([style*="display: none"]) .check-item:checked');
+      if (selecionadas.length === 0) return alert('Selecione ao menos uma despesa para dar baixa como paga.');
+
+      var hojeIso = new Date().toISOString().split('T')[0];
+
+      if (confirm('Deseja marcar as ' + selecionadas.length + ' despesas selecionadas como PAGAS com a data de hoje (' + formatarParaTabelaDate(hojeIso) + ')?')) {
+        selecionadas.forEach(function(cb) {
+          var tr = cb.closest('tr');
+          tr.dataset.status = 'PAGA';
+          tr.cells[1].className = '';
+          tr.cells[4].innerText = formatarParaTabelaDate(hojeIso);
+          tr.cells[5].innerHTML = '<span class="badge-status badge-paga">PAGA</span>';
+          cb.checked = false;
+        });
+
+        filtrarDespesas();
+        salvarDadosNaPlanilha();
+      }
+    }
+
+    function gerarPDF() {
+      var selecionadas = Array.from(document.querySelectorAll('#tabela-corpo tr:not([style*="display: none"]) .check-item:checked')).map(function(cb) { return cb.closest('tr'); });
+      if (selecionadas.length === 0) {
+        selecionadas = Array.from(document.querySelectorAll('#tabela-corpo tr:not([style*="display: none"])'));
+      }
+
+      if (selecionadas.length === 0) return alert('Nenhuma despesa para exportar.');
+
+      const { jsPDF } = window.jspdf;
+      var doc = new jsPDF();
+
+      var dataHoje = new Date().toLocaleDateString('pt-BR');
+      
+      doc.setFontSize(16);
+      doc.text('Relatório de Despesas', 14, 15);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text('Data de Geração: ' + dataHoje, 14, 22);
+
+      var controleFiltro = document.getElementById('select-controle').value;
+      if (controleFiltro !== 'TODOS') {
+        doc.text('Controle / Conta: ' + controleFiltro, 14, 27);
+      }
+
+      var colunas = ["Fornecedor / Descrição", "Valor (R$)", "Vencimento", "Pagamento", "Situação"];
+      var linhasDados = [];
+      var totalSoma = 0;
+
+      selecionadas.forEach(function(tr) {
+        var fornecedor = tr.cells[1].innerText.trim();
+        var valorStr = tr.cells[2].innerText.trim();
+        var vencimento = tr.cells[3].innerText.trim();
+        var pagamento = tr.cells[4].innerText.trim();
+        var situacao = tr.dataset.status;
+
+        totalSoma += extrairValorNumerico(valorStr);
+
+        linhasDados.push([fornecedor, valorStr, vencimento, pagamento, situacao]);
+      });
+
+      doc.autoTable({
+        startY: controleFiltro !== 'TODOS' ? 32 : 27,
+        head: [colunas],
+        body: linhasDados,
+        theme: 'striped',
+        headStyles: { fillColor: [30, 41, 59] },
+        foot: [["Total", totalSoma.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), "", "", ""]],
+        footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }
+      });
+
+      doc.save('relatorio_despesas_' + dataHoje.replace(/\//g, '-') + '.pdf');
+    }
+
+    function exportarCSV() {
+      var selecionadas = Array.from(document.querySelectorAll('#tabela-corpo tr:not([style*="display: none"]) .check-item:checked')).map(function(cb) { return cb.closest('tr'); });
+      if (selecionadas.length === 0) {
+        selecionadas = Array.from(document.querySelectorAll('#tabela-corpo tr:not([style*="display: none"])'));
+      }
+
+      if (selecionadas.length === 0) return alert('Nenhuma despesa para exportar.');
+
+      var csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+      csvContent += "Controle;Fornecedor;Valor;Vencimento;Pagamento;Situacao\n";
+
+      selecionadas.forEach(function(tr) {
+        var controle = tr.dataset.controle;
+        var fornecedor = tr.cells[1].innerText.trim();
+        var valor = tr.cells[2].innerText.trim();
+        var vencimento = tr.cells[3].innerText.trim();
+        var pagamento = tr.cells[4].innerText.trim();
+        var situacao = tr.dataset.status;
+
+        csvContent += '"' + controle + '";"' + fornecedor + '";"' + valor + '";"' + vencimento + '";"' + pagamento + '";"' + situacao + '"\n';
+      });
+
+      var encodedUri = encodeURI(csvContent);
+      var link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "despesas_exportadas.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
