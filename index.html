@@ -264,9 +264,11 @@
   <script>
     // ==========================================
     // CONFIGURAÇÃO DO SUPABASE
+    // substitua as duas variáveis abaixo pelos dados do seu projeto Supabase:
     // ==========================================
     const SUPABASE_URL = 'SUA_URL_DO_SUPABASE'; 
     const SUPABASE_KEY = 'SUA_CHAVE_ANON_DO_SUPABASE';
+
     const _supabase = (typeof supabase !== 'undefined' && SUPABASE_URL !== 'SUA_URL_DO_SUPABASE') 
       ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) 
       : null;
@@ -436,7 +438,6 @@
             atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
           }
         } else {
-          // Salvar no LocalStorage
           if (!linhaEmEdicao) {
             objetoDespesa.id = Date.now().toString();
             criarLinhaTabela(objetoDespesa);
@@ -506,9 +507,6 @@
       atualizarStatusSync("✓ Modo Offline", "#a0aec0");
     }
 
-    // ==========================================
-    // FUNÇÕES AUXILIARES DA INTERFACE
-    // ==========================================
     function abrirModalNovaDespesa() {
       linhaEmEdicao = null;
       idEmEdicao = null;
@@ -783,6 +781,41 @@
       }
     }
 
+    function ordenarTabela(colunaIdx, tipo) {
+      var tbody = document.getElementById('tabela-corpo');
+      var linhas = Array.from(tbody.querySelectorAll('tr'));
+      var ascendente = ordensColuna[colunaIdx];
+
+      linhas.sort(function(a, b) {
+        var valA = a.cells[colunaIdx].innerText.trim();
+        var valB = b.cells[colunaIdx].innerText.trim();
+
+        if (tipo === 'valor') {
+          valA = extrairValorNumerico(valA);
+          valB = extrairValorNumerico(valB);
+          return ascendente ? valA - valB : valB - valA;
+        } else if (tipo === 'data') {
+          valA = formatarParaInputDate(valA) || '9999-99-99';
+          valB = formatarParaInputDate(valB) || '9999-99-99';
+          return ascendente ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        } else {
+          return ascendente ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+      });
+
+      ordensColuna[colunaIdx] = !ascendente;
+
+      [1, 2, 3, 4].forEach(function(i) {
+        var icon = document.getElementById('sort-icon-' + i);
+        if (icon) icon.innerText = '↕';
+      });
+
+      var iconAtual = document.getElementById('sort-icon-' + colunaIdx);
+      if (iconAtual) iconAtual.innerText = ascendente ? '▲' : '▼';
+
+      linhas.forEach(function(tr) { tbody.appendChild(tr); });
+    }
+
     function gerarPDF() {
       var { jsPDF } = window.jspdf;
       var doc = new jsPDF();
@@ -808,15 +841,20 @@
 
       if (linhasParaPdf.length === 0) return alert('Selecione ao menos uma linha na tabela para gerar o PDF.');
 
-      doc.text("Relatório de Despesas", 14, 15);
+      var dataHoje = new Date().toLocaleDateString('pt-BR');
+
+      doc.text("Relatório de Despesas Selecionadas", 14, 15);
+      doc.setFontSize(10);
+      doc.text("Gerado em: " + dataHoje, 14, 22);
+
       doc.autoTable({
-        startY: 20,
+        startY: 27,
         head: [['Fornecedor', 'Valor', 'Vencimento', 'Pagamento', 'Situação']],
         body: linhasParaPdf,
       });
 
       doc.text("Total Selecionado: " + totalSum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 14, doc.lastAutoTable.finalY + 10);
-      doc.save("despesas.pdf");
+      doc.save("despesas_" + dataHoje.replace(/\//g, '-') + ".pdf");
     }
 
     function exportarCSV() {
