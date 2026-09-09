@@ -4,14 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Controle de Despesas</title>
-  
+
+  <!-- Bibliotecas de PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- SDK Supabase (JS) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
     body { background-color: #0b1325; color: #ffffff; padding: 15px; }
-    
+
     .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
     .title-section h1 { font-size: 22px; font-weight: bold; }
     .sync-status { font-size: 12px; color: #a0aec0; margin-top: 4px; }
@@ -50,7 +54,7 @@
     th.sortable { cursor: pointer; user-select: none; }
     th.sortable:hover { background-color: #f8fafc; color: #0066ff; }
     td { padding: 12px; border-bottom: 1px solid #edf2f7; }
-    
+
     .badge-status { padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; display: inline-block; }
     .badge-vencida { background-color: #ffd6d6; color: #e53e3e; animation: piscar-alerta 1s infinite alternate; }
     .badge-vence-hoje { background-color: #fef3c7; color: #d97706; animation: piscar-alerta 1.2s infinite alternate; }
@@ -240,13 +244,13 @@
         <h2>Gerenciar Controles</h2>
         <button class="modal-close" onclick="fecharModalControles()">✕</button>
       </div>
-      
+
       <ul class="controles-list" id="lista-controles-modal"></ul>
 
       <div class="form-group">
         <label for="novo-controle-nome">Adicionar Novo Controle</label>
         <div style="display: flex; gap: 8px;">
-          <input type="text" id="novo-controle-nome" placeholder="Nome do Controle (ex: Fazenda Nova)">
+          <input type="text" id="novo-controle-nome" placeholder="Nome do Controle">
           <button type="button" class="btn-salvar" onclick="adicionarNovoControle()">Adicionar</button>
         </div>
       </div>
@@ -258,81 +262,25 @@
   </div>
 
   <script>
+    // ==========================================
+    // CONFIGURAÇÃO DO SUPABASE
+    // ==========================================
+    const SUPABASE_URL = 'SUA_URL_DO_SUPABASE'; 
+    const SUPABASE_KEY = 'SUA_CHAVE_ANON_DO_SUPABASE';
+    const _supabase = (typeof supabase !== 'undefined' && SUPABASE_URL !== 'SUA_URL_DO_SUPABASE') 
+      ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) 
+      : null;
+
+    var idEmEdicao = null;
     var linhaEmEdicao = null;
     var controles = ["Romerio", "Fazenda Boa Esperança", "Fazenda Alvorada"];
     var ordensColuna = { 1: true, 2: true, 3: true, 4: true };
 
     function extrairValorNumerico(texto) {
       if (!texto) return 0;
-      var limpo = texto.replace('R$', '').trim();
+      var limpo = texto.toString().replace('R$', '').trim();
       limpo = limpo.split('.').join('').replace(',', '.');
       return parseFloat(limpo) || 0;
-    }
-
-    window.addEventListener('DOMContentLoaded', function() {
-      carregarDadosPlanilha();
-    });
-
-    function carregarDadosPlanilha() {
-      atualizarStatusSync("☁️ Sincronizando...", "#d97706");
-      
-      if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler(function(resposta) {
-            if (resposta && resposta.despesas) {
-              if (resposta.controles && resposta.controles.length > 0) {
-                controles = resposta.controles;
-              }
-              
-              var tbody = document.getElementById('tabela-corpo');
-              tbody.innerHTML = '';
-              resposta.despesas.forEach(function(item) { criarLinhaTabela(item); });
-              
-              atualizarSelectsControles();
-              filtrarDespesas();
-              atualizarStatusSync("✓ Salvo na Planilha", "#38ef7d");
-            }
-          })
-          .withFailureHandler(function(err) {
-            console.error(err);
-            atualizarStatusSync("✕ Erro ao carregar", "#e53e3e");
-          }).obterDadosPlanilha();
-      } else {
-        carregarDadosLocalStorage();
-      }
-    }
-
-    function salvarDadosNaPlanilha() {
-      atualizarStatusSync("☁️ Salvando...", "#d97706");
-      
-      var despesas = [];
-      document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
-        var id = tr.dataset.id;
-        var controle = tr.dataset.controle;
-        var status = tr.dataset.status;
-        var anexo = tr.dataset.anexo || "";
-        var fornecedor = tr.cells[1].innerText.trim();
-        var valor = extrairValorNumerico(tr.cells[2].innerText);
-        var vencimento = formatarParaInputDate(tr.cells[3].innerText.trim());
-        var pagamento = formatarParaInputDate(tr.cells[4].innerText.trim());
-
-        despesas.push({ id: id, controle: controle, fornecedor: fornecedor, valor: valor, vencimento: vencimento, pagamento: pagamento, status: status, anexo: anexo });
-      });
-
-      if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler(function() {
-            atualizarStatusSync("✓ Salvo na Planilha", "#38ef7d");
-          })
-          .withFailureHandler(function(err) {
-            console.error(err);
-            atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
-          }).salvarDadosPlanilha(despesas, controles);
-      } else {
-        localStorage.setItem('app_controles', JSON.stringify(controles));
-        localStorage.setItem('app_despesas_v2', JSON.stringify(despesas));
-        atualizarStatusSync("✓ Salvo Localmente", "#38ef7d");
-      }
     }
 
     function atualizarStatusSync(texto, cor) {
@@ -343,11 +291,42 @@
       }
     }
 
+    window.addEventListener('DOMContentLoaded', function() {
+      carregarDados();
+    });
+
+    async function carregarDados() {
+      atualizarStatusSync("☁️ Sincronizando...", "#d97706");
+
+      if (_supabase) {
+        try {
+          const { data, error } = await _supabase.from('despesas').select('*');
+          if (error) throw error;
+
+          var tbody = document.getElementById('tabela-corpo');
+          tbody.innerHTML = '';
+          if (data) {
+            data.forEach(function(item) { criarLinhaTabela(item); });
+          }
+
+          atualizarSelectsControles();
+          filtrarDespesas();
+          atualizarStatusSync("✓ Sincronizado", "#38ef7d");
+        } catch (err) {
+          console.error('Erro no Supabase:', err);
+          atualizarStatusSync("✕ Erro ao carregar", "#e53e3e");
+          carregarDadosLocalStorage();
+        }
+      } else {
+        carregarDadosLocalStorage();
+      }
+    }
+
     function carregarDadosLocalStorage() {
       var controlesSalvos = localStorage.getItem('app_controles');
       if (controlesSalvos) controles = JSON.parse(controlesSalvos);
 
-      var despesasSalvas = localStorage.getItem('app_despesas_v2') || localStorage.getItem('app_despesas');
+      var despesasSalvas = localStorage.getItem('app_despesas_v2');
       var dadosParaCarregar = despesasSalvas ? JSON.parse(despesasSalvas) : [];
 
       var tbody = document.getElementById('tabela-corpo');
@@ -372,16 +351,16 @@
     function criarLinhaTabela(item) {
       var tbody = document.getElementById('tabela-corpo');
       var tr = document.createElement('tr');
-      
-      var statusReal = calcularStatusAutomatico(item.vencimento, item.status);
+
+      var statusReal = calcularStatusAutomatico(item.vencimento, item.status || item.situacao);
 
       tr.dataset.id = item.id || Date.now().toString();
       tr.dataset.controle = item.controle;
       tr.dataset.status = statusReal;
       tr.dataset.anexo = item.anexo || "";
 
-      var valorFormatado = (item.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-      
+      var valorFormatado = (parseFloat(item.valor) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
       var classeTexto = '';
       var badgeHtml = '<span class="badge-status badge-aberto">EM ABERTO</span>';
 
@@ -411,45 +390,182 @@
       tbody.appendChild(tr);
     }
 
-    function ordenarTabela(indiceColuna, tipo) {
-      var tbody = document.getElementById('tabela-corpo');
-      var linhas = Array.from(tbody.querySelectorAll('tr'));
-      var ascendente = ordensColuna[indiceColuna];
+    async function salvarEdicao(event) {
+      event.preventDefault();
 
-      linhas.sort(function(a, b) {
-        var valA = a.cells[indiceColuna].innerText.trim();
-        var valB = b.cells[indiceColuna].innerText.trim();
+      var novoControle = document.getElementById('edit-controle').value;
+      var novoFornecedor = document.getElementById('edit-fornecedor').value.trim();
+      var novoValorStr = document.getElementById('edit-valor').value.trim();
+      var novoVencimentoIso = document.getElementById('edit-vencimento').value;
+      var novaSituacao = document.getElementById('edit-situacao').value;
+      var novoPagamentoIso = document.getElementById('edit-pagamento').value;
+      var inputAnexo = document.getElementById('edit-anexo');
 
-        if (tipo === 'data') {
-          valA = converterDataParaISO(valA);
-          valB = converterDataParaISO(valB);
-        } else if (tipo === 'valor') {
-          valA = extrairValorNumerico(valA);
-          valB = extrairValorNumerico(valB);
+      var valorNumerico = extrairValorNumerico(novoValorStr);
+      if (isNaN(valorNumerico)) return alert('Por favor, digite um valor numérico válido.');
+
+      var processarEGuardar = async function(anexoBase64) {
+        var statusCalculado = novaSituacao;
+        if (novoPagamentoIso && novoPagamentoIso !== '') {
+          statusCalculado = 'PAGA';
+        } else {
+          statusCalculado = calcularStatusAutomatico(novoVencimentoIso, novaSituacao);
         }
 
-        if (valA === valB) return 0;
-        if (valA === '0000-00-00' || valA === '') return 1;
-        if (valB === '0000-00-00' || valB === '') return -1;
+        var objetoDespesa = {
+          controle: novoControle,
+          fornecedor: novoFornecedor,
+          valor: valorNumerico,
+          vencimento: novoVencimentoIso,
+          pagamento: novoPagamentoIso || null,
+          status: statusCalculado,
+          anexo: anexoBase64
+        };
 
-        return ascendente ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
-      });
+        if (_supabase) {
+          atualizarStatusSync("☁️ Salvando...", "#d97706");
+          try {
+            if (idEmEdicao) {
+              await _supabase.from('despesas').update(objetoDespesa).eq('id', idEmEdicao);
+            } else {
+              await _supabase.from('despesas').insert([objetoDespesa]);
+            }
+            await carregarDados();
+          } catch (err) {
+            console.error(err);
+            atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
+          }
+        } else {
+          // Salvar no LocalStorage
+          if (!linhaEmEdicao) {
+            objetoDespesa.id = Date.now().toString();
+            criarLinhaTabela(objetoDespesa);
+          } else {
+            linhaEmEdicao.dataset.controle = novoControle;
+            linhaEmEdicao.dataset.status = statusCalculado;
+            linhaEmEdicao.dataset.anexo = anexoBase64;
+            linhaEmEdicao.cells[1].innerText = novoFornecedor;
+            linhaEmEdicao.cells[2].innerText = valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            linhaEmEdicao.cells[3].innerText = formatarParaTabelaDate(novoVencimentoIso);
+            linhaEmEdicao.cells[4].innerText = statusCalculado === 'PAGA' ? formatarParaTabelaDate(novoPagamentoIso) : '-';
+          }
+          salvarCacheLocal();
+        }
 
-      ordensColuna[indiceColuna] = !ascendente;
-      linhas.forEach(function(linha) { tbody.appendChild(linha); });
+        fecharModalEdicao();
+      };
 
-      for (var i = 1; i <= 4; i++) {
-        var icone = document.getElementById('sort-icon-' + i);
-        if (icone) icone.innerText = (i === indiceColuna) ? (ascendente ? '▲' : '▼') : '↕';
+      if (inputAnexo.files && inputAnexo.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function(e) { processarEGuardar(e.target.result); };
+        reader.readAsDataURL(inputAnexo.files[0]);
+      } else {
+        var anexoExistente = linhaEmEdicao ? linhaEmEdicao.dataset.anexo : "";
+        processarEGuardar(anexoExistente);
       }
-      
-      salvarDadosNaPlanilha();
     }
 
-    function converterDataParaISO(dataStr) {
-      if (!dataStr || dataStr === '-') return '0000-00-00';
-      var partes = dataStr.split('/');
-      return partes.length === 3 ? partes[2] + '-' + partes[1].padStart(2, '0') + '-' + partes[0].padStart(2, '0') : '0000-00-00';
+    async function excluirDespesa(botao) {
+      var tr = botao.closest('tr');
+      var id = tr.dataset.id;
+
+      if (confirm('Deseja realmente excluir esta despesa?')) {
+        if (_supabase) {
+          atualizarStatusSync("☁️ Excluindo...", "#d97706");
+          try {
+            await _supabase.from('despesas').delete().eq('id', id);
+            await carregarDados();
+          } catch (err) {
+            console.error(err);
+            atualizarStatusSync("✕ Erro ao excluir", "#e53e3e");
+          }
+        } else {
+          tr.remove();
+          salvarCacheLocal();
+        }
+      }
+    }
+
+    function salvarCacheLocal() {
+      var despesas = [];
+      document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
+        despesas.push({
+          id: tr.dataset.id,
+          controle: tr.dataset.controle,
+          fornecedor: tr.cells[1].innerText.trim(),
+          valor: extrairValorNumerico(tr.cells[2].innerText),
+          vencimento: formatarParaInputDate(tr.cells[3].innerText.trim()),
+          pagamento: formatarParaInputDate(tr.cells[4].innerText.trim()),
+          status: tr.dataset.status,
+          anexo: tr.dataset.anexo || ""
+        });
+      });
+      localStorage.setItem('app_controles', JSON.stringify(controles));
+      localStorage.setItem('app_despesas_v2', JSON.stringify(despesas));
+      filtrarDespesas();
+      atualizarStatusSync("✓ Modo Offline", "#a0aec0");
+    }
+
+    // ==========================================
+    // FUNÇÕES AUXILIARES DA INTERFACE
+    // ==========================================
+    function abrirModalNovaDespesa() {
+      linhaEmEdicao = null;
+      idEmEdicao = null;
+      document.getElementById('modal-edicao-titulo').innerText = 'Nova Despesa';
+      document.getElementById('form-editar').reset();
+      document.getElementById('edit-situacao').value = 'EM ABERTO';
+      document.getElementById('modal-edicao').classList.add('active');
+    }
+
+    function abrirModalEdicao(botao) {
+      linhaEmEdicao = botao.closest('tr');
+      idEmEdicao = linhaEmEdicao.dataset.id;
+
+      document.getElementById('modal-edicao-titulo').innerText = 'Editar Despesa';
+      document.getElementById('edit-controle').value = linhaEmEdicao.dataset.controle;
+      document.getElementById('edit-fornecedor').value = linhaEmEdicao.cells[1].innerText.trim();
+      document.getElementById('edit-valor').value = linhaEmEdicao.cells[2].innerText.replace('R$', '').trim();
+      document.getElementById('edit-vencimento').value = formatarParaInputDate(linhaEmEdicao.cells[3].innerText.trim());
+      document.getElementById('edit-pagamento').value = formatarParaInputDate(linhaEmEdicao.cells[4].innerText.trim());
+      document.getElementById('edit-situacao').value = linhaEmEdicao.dataset.status;
+      document.getElementById('edit-anexo').value = '';
+
+      document.getElementById('modal-edicao').classList.add('active');
+    }
+
+    function fecharModalEdicao() {
+      document.getElementById('modal-edicao').classList.remove('active');
+      linhaEmEdicao = null;
+      idEmEdicao = null;
+    }
+
+    function aoMudarSituacaoModal() {
+      var situacao = document.getElementById('edit-situacao').value;
+      var inputPagamento = document.getElementById('edit-pagamento');
+      if (situacao === 'PAGA' && !inputPagamento.value) {
+        inputPagamento.value = new Date().toISOString().split('T')[0];
+      }
+    }
+
+    function formatarParaInputDate(dataStr) {
+      if (!dataStr || dataStr === '-') return '';
+      if (typeof dataStr === 'string' && dataStr.indexOf('/') !== -1) {
+        var partes = dataStr.split('/');
+        return partes.length === 3 ? partes[2] + '-' + partes[1].padStart(2, '0') + '-' + partes[0].padStart(2, '0') : '';
+      }
+      return dataStr;
+    }
+
+    function formatarParaTabelaDate(dataVal) {
+      if (!dataVal || dataVal === '-') return '-';
+      if (typeof dataVal === 'string' && dataVal.indexOf('-') !== -1) {
+        var partesIso = dataVal.split('T')[0].split('-');
+        if (partesIso.length === 3) {
+          return partesIso[2].padStart(2, '0') + '/' + partesIso[1].padStart(2, '0') + '/' + partesIso[0];
+        }
+      }
+      return dataVal;
     }
 
     function atualizarSelectsControles() {
@@ -505,7 +621,7 @@
       input.value = '';
       renderizarListaControlesModal();
       atualizarSelectsControles();
-      salvarDadosNaPlanilha();
+      salvarCacheLocal();
     }
 
     function editarNomeControle(index) {
@@ -513,13 +629,9 @@
       var novo = prompt('Novo nome para o controle:', antigo);
       if (novo && novo.trim() !== '') {
         controles[index] = novo.trim();
-        document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
-          if (tr.dataset.controle === antigo) tr.dataset.controle = novo.trim();
-        });
         renderizarListaControlesModal();
         atualizarSelectsControles();
-        filtrarDespesas();
-        salvarDadosNaPlanilha();
+        salvarCacheLocal();
       }
     }
 
@@ -530,240 +642,44 @@
         controles.splice(index, 1);
         renderizarListaControlesModal();
         atualizarSelectsControles();
-        filtrarDespesas();
-        salvarDadosNaPlanilha();
+        salvarCacheLocal();
       }
-    }
-
-    function abrirModalNovaDespesa() {
-      linhaEmEdicao = null;
-      document.getElementById('modal-edicao-titulo').innerText = 'Nova Despesa';
-      document.getElementById('form-editar').reset();
-      document.getElementById('edit-situacao').value = 'EM ABERTO';
-      document.getElementById('modal-edicao').classList.add('active');
-    }
-
-    function formatarParaInputDate(dataStr) {
-      if (!dataStr || dataStr === '-') return '';
-      if (typeof dataStr === 'string' && dataStr.indexOf('/') !== -1) {
-        var partes = dataStr.split('/');
-        return partes.length === 3 ? partes[2] + '-' + partes[1].padStart(2, '0') + '-' + partes[0].padStart(2, '0') : '';
-      }
-      return dataStr;
-    }
-
-    function formatarParaTabelaDate(dataVal) {
-      if (!dataVal || dataVal === '-') return '-';
-      if (typeof dataVal === 'string' && dataVal.indexOf('-') !== -1) {
-        var partesIso = dataVal.split('T')[0].split('-');
-        if (partesIso.length === 3) {
-          return partesIso[2].padStart(2, '0') + '/' + partesIso[1].padStart(2, '0') + '/' + partesIso[0];
-        }
-      }
-      if (typeof dataVal === 'string' && dataVal.indexOf('/') !== -1) {
-        return dataVal;
-      }
-      return '-';
-    }
-
-    function abrirModalEdicao(botao) {
-      linhaEmEdicao = botao.closest('tr');
-      document.getElementById('modal-edicao-titulo').innerText = 'Editar Despesa';
-
-      var controle = linhaEmEdicao.dataset.controle;
-      var fornecedor = linhaEmEdicao.cells[1].innerText.trim();
-      var valorStr = linhaEmEdicao.cells[2].innerText.replace('R$', '').trim();
-      var vencimentoStr = linhaEmEdicao.cells[3].innerText.trim();
-      var pagamentoStr = linhaEmEdicao.cells[4].innerText.trim();
-      var status = linhaEmEdicao.dataset.status;
-
-      document.getElementById('edit-controle').value = controle;
-      document.getElementById('edit-fornecedor').value = fornecedor;
-      document.getElementById('edit-valor').value = valorStr;
-      document.getElementById('edit-vencimento').value = formatarParaInputDate(vencimentoStr);
-      document.getElementById('edit-pagamento').value = formatarParaInputDate(pagamentoStr);
-      document.getElementById('edit-situacao').value = status;
-      document.getElementById('edit-anexo').value = '';
-
-      document.getElementById('modal-edicao').classList.add('active');
-    }
-
-    function fecharModalEdicao() {
-      document.getElementById('modal-edicao').classList.remove('active');
-      linhaEmEdicao = null;
-    }
-
-    function aoMudarSituacaoModal() {
-      var situacao = document.getElementById('edit-situacao').value;
-      var inputPagamento = document.getElementById('edit-pagamento');
-      if (situacao === 'PAGA' && !inputPagamento.value) {
-        inputPagamento.value = new Date().toISOString().split('T')[0];
-      }
-    }
-
-    function salvarEdicao(event) {
-      event.preventDefault();
-
-      var novoControle = document.getElementById('edit-controle').value;
-      var novoFornecedor = document.getElementById('edit-fornecedor').value.trim();
-      var novoValorStr = document.getElementById('edit-valor').value.trim();
-      var novoVencimentoIso = document.getElementById('edit-vencimento').value;
-      var novaSituacao = document.getElementById('edit-situacao').value;
-      var novoPagamentoIso = document.getElementById('edit-pagamento').value;
-      var inputAnexo = document.getElementById('edit-anexo');
-
-      var valorNumerico = extrairValorNumerico(novoValorStr);
-      if (isNaN(valorNumerico)) return alert('Por favor, digite um valor numérico válido.');
-
-      var finalizarSalvar = function(anexoBase64) {
-        var statusCalculado = novaSituacao;
-        if (novoPagamentoIso && novoPagamentoIso !== '') {
-          statusCalculado = 'PAGA';
-        } else {
-          statusCalculado = calcularStatusAutomatico(novoVencimentoIso, novaSituacao);
-        }
-
-        if (!linhaEmEdicao) {
-          criarLinhaTabela({
-            id: Date.now().toString(),
-            controle: novoControle,
-            fornecedor: novoFornecedor,
-            valor: valorNumerico,
-            vencimento: novoVencimentoIso,
-            pagamento: novoPagamentoIso,
-            status: statusCalculado,
-            anexo: anexoBase64
-          });
-        } else {
-          linhaEmEdicao.dataset.controle = novoControle;
-          linhaEmEdicao.dataset.status = statusCalculado;
-          linhaEmEdicao.dataset.anexo = anexoBase64;
-          linhaEmEdicao.cells[1].innerText = novoFornecedor;
-          
-          linhaEmEdicao.cells[1].className = '';
-          if (statusCalculado === 'VENCIDA') linhaEmEdicao.cells[1].className = 'texto-vencido';
-          if (statusCalculado === 'VENCE HOJE') linhaEmEdicao.cells[1].className = 'texto-vence-hoje';
-
-          linhaEmEdicao.cells[2].innerText = valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-          linhaEmEdicao.cells[3].innerText = formatarParaTabelaDate(novoVencimentoIso);
-          linhaEmEdicao.cells[4].innerText = statusCalculado === 'PAGA' ? formatarParaTabelaDate(novoPagamentoIso) : '-';
-          linhaEmEdicao.cells[6].innerHTML = anexoBase64 ? '<a href="' + anexoBase64 + '" target="_blank" class="anexo-link" title="Visualizar Anexo">📎</a>' : '-';
-
-          var tdSituacao = linhaEmEdicao.cells[5];
-          if (statusCalculado === 'PAGA') {
-            tdSituacao.innerHTML = '<span class="badge-status badge-paga">PAGA</span>';
-          } else if (statusCalculado === 'VENCIDA') {
-            tdSituacao.innerHTML = '<span class="badge-status badge-vencida">VENCIDA</span>';
-          } else if (statusCalculado === 'VENCE HOJE') {
-            tdSituacao.innerHTML = '<span class="badge-status badge-vence-hoje">VENCE HOJE</span>';
-          } else {
-            tdSituacao.innerHTML = '<span class="badge-status badge-aberto">EM ABERTO</span>';
-          }
-        }
-
-        fecharModalEdicao();
-        filtrarDespesas();
-        salvarDadosNaPlanilha();
-      };
-
-      var anexoBase64 = linhaEmEdicao ? (linhaEmEdicao.dataset.anexo || "") : "";
-      if (inputAnexo.files && inputAnexo.files[0]) {
-        converterArquivoBase64(inputAnexo.files[0]).then(finalizarSalvar).catch(function(err) {
-          console.error(err);
-          finalizarSalvar(anexoBase64);
-        });
-      } else {
-        finalizarSalvar(anexoBase64);
-      }
-    }
-
-    function converterArquivoBase64(file) {
-      return new Promise(function(resolve, reject) {
-        var reader = new FileReader();
-        reader.onload = function() { resolve(reader.result); };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
-    function excluirDespesa(botao) {
-      if (confirm('Tem certeza que deseja excluir esta despesa?')) {
-        var linha = botao.closest('tr');
-        linha.remove();
-        filtrarDespesas();
-        salvarDadosNaPlanilha();
-      }
-    }
-
-    function pagarSelecionadasHoje() {
-      var selecionadas = document.querySelectorAll('.check-item:checked');
-      if (selecionadas.length === 0) return alert('Selecione pelo menos uma despesa para pagar.');
-
-      var hojeIso = new Date().toISOString().split('T')[0];
-      selecionadas.forEach(function(chk) {
-        var tr = chk.closest('tr');
-        tr.dataset.status = 'PAGA';
-        tr.cells[1].className = '';
-        tr.cells[4].innerText = formatarParaTabelaDate(hojeIso);
-        tr.cells[5].innerHTML = '<span class="badge-status badge-paga">PAGA</span>';
-      });
-
-      filtrarDespesas();
-      salvarDadosNaPlanilha();
-    }
-
-    function toggleSelectAll(master) {
-      var checkboxes = document.querySelectorAll('#tabela-corpo tr:not([style*="display: none"]) .check-item');
-      checkboxes.forEach(function(chk) { chk.checked = master.checked; });
-      atualizarSomaSelecionadas();
-    }
-
-    function atualizarSomaSelecionadas() {
-      var total = 0;
-      document.querySelectorAll('.check-item:checked').forEach(function(chk) {
-        var tr = chk.closest('tr');
-        total += extrairValorNumerico(tr.cells[2].innerText);
-      });
-      document.getElementById('card-total-selecionadas').innerText = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     }
 
     function filtrarDespesas() {
       var controleSel = document.getElementById('select-controle').value;
-      var buscaTexto = document.getElementById('input-busca').value.toLowerCase();
+      var busca = document.getElementById('input-busca').value.toLowerCase();
       var dataDe = document.getElementById('data-de').value;
       var dataAte = document.getElementById('data-ate').value;
 
-      var statusCheckboxes = Array.from(document.querySelectorAll('.filter-status:checked')).map(function(c) { return c.value; });
+      var chksStatus = Array.from(document.querySelectorAll('.filter-status:checked')).map(function(c) { return c.value; });
 
-      var totalAVencer = 0;
-      var totalVencidas = 0;
-      var totalVenceHoje = 0;
+      var totalAVencer = 0, totalVencidas = 0, totalVenceHoje = 0;
 
       document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
-        var cControle = tr.dataset.controle;
-        var cStatus = tr.dataset.status;
-        var cFornecedor = tr.cells[1].innerText.toLowerCase();
-        var cValor = extrairValorNumerico(tr.cells[2].innerText);
-        var cVencimentoIso = converterDataParaISO(tr.cells[3].innerText.trim());
+        var c = tr.dataset.controle;
+        var s = tr.dataset.status;
+        var fornecedor = tr.cells[1].innerText.toLowerCase();
+        var valor = extrairValorNumerico(tr.cells[2].innerText);
+        var vencimentoIso = formatarParaInputDate(tr.cells[3].innerText.trim());
 
-        if (cStatus === 'EM ABERTO') totalAVencer += cValor;
-        if (cStatus === 'VENCIDA') totalVencidas += cValor;
-        if (cStatus === 'VENCE HOJE') totalVenceHoje += cValor;
+        var exibe = true;
 
-        var bateControle = (controleSel === 'TODOS' || cControle === controleSel);
-        var bateTexto = cFornecedor.includes(buscaTexto);
-        var bateStatus = statusCheckboxes.includes('TODAS') || statusCheckboxes.includes(cStatus);
-        var bateData = true;
+        if (controleSel !== 'TODOS' && c !== controleSel) exibe = false;
+        if (busca && !fornecedor.includes(busca)) exibe = false;
+        if (dataDe && vencimentoIso < dataDe) exibe = false;
+        if (dataAte && vencimentoIso > dataAte) exibe = false;
 
-        if (dataDe && cVencimentoIso < dataDe) bateData = false;
-        if (dataAte && cVencimentoIso > dataAte) bateData = false;
+        if (!chksStatus.includes('TODAS')) {
+          if (!chksStatus.includes(s)) exibe = false;
+        }
 
-        if (bateControle && bateTexto && bateStatus && bateData) {
-          tr.style.display = '';
-        } else {
-          tr.style.display = 'none';
-          var chk = tr.querySelector('.check-item');
-          if (chk) chk.checked = false;
+        tr.style.display = exibe ? '' : 'none';
+
+        if (exibe) {
+          if (s === 'EM ABERTO') totalAVencer += valor;
+          if (s === 'VENCIDA') totalVencidas += valor;
+          if (s === 'VENCE HOJE') totalVenceHoje += valor;
         }
       });
 
@@ -777,14 +693,16 @@
     function filtrarPorMes() {
       var mesAno = document.getElementById('filtro-mes').value;
       if (!mesAno) return;
+
       var partes = mesAno.split('-');
       var ano = partes[0];
       var mes = partes[1];
-      
+
       var ultimoDia = new Date(ano, mes, 0).getDate();
+
       document.getElementById('data-de').value = ano + '-' + mes + '-01';
       document.getElementById('data-ate').value = ano + '-' + mes + '-' + String(ultimoDia).padStart(2, '0');
-      
+
       filtrarDespesas();
     }
 
@@ -794,90 +712,138 @@
       document.getElementById('filtro-mes').value = '';
       document.getElementById('data-de').value = '';
       document.getElementById('data-ate').value = '';
+
+      document.querySelectorAll('.filter-status').forEach(function(c) { c.checked = false; });
+      document.querySelector('.filter-status[value="EM ABERTO"]').checked = true;
+
       filtrarDespesas();
     }
 
-    function marcarTodasStatus(chkMaster) {
-      document.querySelectorAll('.filter-status').forEach(function(chk) { chk.checked = chkMaster.checked; });
+    function marcarTodasStatus(chk) {
+      document.querySelectorAll('.filter-status').forEach(function(c) {
+        if (c !== chk) c.checked = chk.checked;
+      });
       filtrarDespesas();
     }
 
     function desmarcarTodosStatus() {
-      document.querySelectorAll('.filter-status').forEach(function(chk) { chk.checked = false; });
+      document.querySelectorAll('.filter-status').forEach(function(c) { c.checked = false; });
       filtrarDespesas();
+    }
+
+    function toggleSelectAll(master) {
+      document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
+        if (tr.style.display !== 'none') {
+          var chk = tr.querySelector('.check-item');
+          if (chk) chk.checked = master.checked;
+        }
+      });
+      atualizarSomaSelecionadas();
+    }
+
+    function atualizarSomaSelecionadas() {
+      var total = 0;
+      document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
+        if (tr.style.display !== 'none') {
+          var chk = tr.querySelector('.check-item');
+          if (chk && chk.checked) {
+            total += extrairValorNumerico(tr.cells[2].innerText);
+          }
+        }
+      });
+      document.getElementById('card-total-selecionadas').innerText = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    async function pagarSelecionadasHoje() {
+      var marcados = Array.from(document.querySelectorAll('#tabela-corpo tr')).filter(function(tr) {
+        return tr.style.display !== 'none' && tr.querySelector('.check-item') && tr.querySelector('.check-item').checked;
+      });
+
+      if (marcados.length === 0) return alert('Selecione pelo menos uma despesa para pagar.');
+
+      var hojeIso = new Date().toISOString().split('T')[0];
+
+      if (confirm('Marcar as ' + marcados.length + ' despesas selecionadas como PAGAS com a data de hoje?')) {
+        for (var i = 0; i < marcados.length; i++) {
+          var tr = marcados[i];
+          if (_supabase) {
+            await _supabase.from('despesas').update({ status: 'PAGA', pagamento: hojeIso }).eq('id', tr.dataset.id);
+          } else {
+            tr.dataset.status = 'PAGA';
+            tr.cells[4].innerText = formatarParaTabelaDate(hojeIso);
+            tr.cells[5].innerHTML = '<span class="badge-status badge-paga">PAGA</span>';
+          }
+        }
+
+        if (_supabase) {
+          await carregarDados();
+        } else {
+          salvarCacheLocal();
+        }
+      }
     }
 
     function gerarPDF() {
       var { jsPDF } = window.jspdf;
       var doc = new jsPDF();
 
-      var selecionadas = document.querySelectorAll('.check-item:checked');
-      var linhasParaImprimir = selecionadas.length > 0 
-        ? Array.from(selecionadas).map(function(chk) { return chk.closest('tr'); })
-        : Array.from(document.querySelectorAll('#tabela-corpo tr:not([style*="display: none"])'));
+      var linhasParaPdf = [];
+      var totalSum = 0;
 
-      if (linhasParaImprimir.length === 0) return alert('Nenhuma despesa para gerar PDF.');
+      document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
+        if (tr.style.display !== 'none') {
+          var chk = tr.querySelector('.check-item');
+          if (chk && chk.checked) {
+            var fornecedor = tr.cells[1].innerText.trim();
+            var valor = tr.cells[2].innerText.trim();
+            var vencimento = tr.cells[3].innerText.trim();
+            var pagamento = tr.cells[4].innerText.trim();
+            var status = tr.dataset.status;
 
-      var dataHoje = new Date().toLocaleDateString('pt-BR');
-      var controleSel = document.getElementById('select-controle').value;
-
-      doc.setFontSize(16);
-      doc.text('Relatório de Despesas', 14, 15);
-      
-      doc.setFontSize(10);
-      doc.text('Data de Emissão: ' + dataHoje, 14, 22);
-      doc.text('Controle / Conta: ' + controleSel, 14, 27);
-
-      var colunas = ["Controle", "Fornecedor", "Valor", "Vencimento", "Pagamento", "Situação"];
-      var dados = [];
-      var somaTotal = 0;
-
-      linhasParaImprimir.forEach(function(tr) {
-        var controle = tr.dataset.controle;
-        var fornecedor = tr.cells[1].innerText.trim();
-        var valorStr = tr.cells[2].innerText.trim();
-        var vencimento = tr.cells[3].innerText.trim();
-        var pagamento = tr.cells[4].innerText.trim();
-        var situacao = tr.dataset.status;
-
-        somaTotal += extrairValorNumerico(valorStr);
-        dados.push([controle, fornecedor, valorStr, vencimento, pagamento, situacao]);
+            totalSum += extrairValorNumerico(valor);
+            linhasParaPdf.push([fornecedor, valor, vencimento, pagamento, status]);
+          }
+        }
       });
 
+      if (linhasParaPdf.length === 0) return alert('Selecione ao menos uma linha na tabela para gerar o PDF.');
+
+      doc.text("Relatório de Despesas", 14, 15);
       doc.autoTable({
-        startY: 32,
-        head: [colunas],
-        body: dados,
-        theme: 'striped',
-        headStyles: { fillColor: [19, 31, 55] }
+        startY: 20,
+        head: [['Fornecedor', 'Valor', 'Vencimento', 'Pagamento', 'Situação']],
+        body: linhasParaPdf,
       });
 
-      var finalY = doc.lastAutoTable.finalY || 40;
-      doc.setFontSize(12);
-      doc.text('Valor Total: ' + somaTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 14, finalY + 10);
-
-      doc.save('Relatorio_Despesas_' + dataHoje.replace(/\//g, '-') + '.pdf');
+      doc.text("Total Selecionado: " + totalSum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), 14, doc.lastAutoTable.finalY + 10);
+      doc.save("despesas.pdf");
     }
 
     function exportarCSV() {
-      var linhas = [["ID", "Controle", "Fornecedor", "Valor", "Vencimento", "Pagamento", "Situacao"]];
+      var csv = ['Fornecedor;Valor;Vencimento;Pagamento;Situacao'];
+
       document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
-        linhas.push([
-          tr.dataset.id,
-          '"' + tr.dataset.controle + '"',
-          '"' + tr.cells[1].innerText.trim() + '"',
-          extrairValorNumerico(tr.cells[2].innerText),
-          formatarParaInputDate(tr.cells[3].innerText.trim()),
-          formatarParaInputDate(tr.cells[4].innerText.trim()),
-          tr.dataset.status
-        ]);
+        if (tr.style.display !== 'none') {
+          var chk = tr.querySelector('.check-item');
+          if (chk && chk.checked) {
+            var row = [
+              '"' + tr.cells[1].innerText.trim() + '"',
+              '"' + tr.cells[2].innerText.trim() + '"',
+              '"' + tr.cells[3].innerText.trim() + '"',
+              '"' + tr.cells[4].innerText.trim() + '"',
+              '"' + tr.dataset.status + '"'
+            ];
+            csv.push(row.join(';'));
+          }
+        }
       });
 
-      var csvContent = "data:text/csv;charset=utf-8," + linhas.map(e => e.join(",")).join("\n");
-      var encodedUri = encodeURI(csvContent);
+      if (csv.length === 1) return alert('Selecione ao menos uma despesa para exportar o CSV.');
+
+      var blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
       var link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "despesas_export.csv");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", "despesas.csv");
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
