@@ -9,9 +9,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 
-  <!-- SDK Supabase (JS) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
     body { background-color: #0b1325; color: #ffffff; padding: 15px; }
@@ -106,7 +103,7 @@
   <div class="header-top">
     <div class="title-section">
       <h1>Controle de Despesas</h1>
-      <div class="sync-status">Sincronização <span class="sync-badge" id="status-sinc">☁️ Carregando...</span></div>
+      <div class="sync-status">Sincronização <span class="sync-badge" id="status-sinc">☁️ Conectando ao Sheets...</span></div>
     </div>
     <div class="top-buttons">
       <button class="btn-top" onclick="abrirModalControles()">⚙ Controles</button>
@@ -262,16 +259,8 @@
   </div>
 
   <script>
-    // ==========================================
-    // CONFIGURAÇÃO DO SUPABASE
-    // substitua as duas variáveis abaixo pelos dados do seu projeto Supabase:
-    // ==========================================
-    const SUPABASE_URL = 'SUA_URL_DO_SUPABASE'; 
-    const SUPABASE_KEY = 'SUA_CHAVE_ANON_DO_SUPABASE';
-
-    const _supabase = (typeof supabase !== 'undefined' && SUPABASE_URL !== 'SUA_URL_DO_SUPABASE') 
-      ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) 
-      : null;
+    // Cole a URL da sua implantação do Apps Script entre as aspas:
+    const API_URL = "SUA_URL_DO_APPS_SCRIPT_AQUI";
 
     var idEmEdicao = null;
     var linhaEmEdicao = null;
@@ -294,50 +283,31 @@
     }
 
     window.addEventListener('DOMContentLoaded', function() {
-      carregarDados();
+      carregarTudoGitHub();
     });
 
-    async function carregarDados() {
-      atualizarStatusSync("☁️ Sincronizando...", "#d97706");
+    async function carregarTudoGitHub() {
+      atualizarStatusSync("☁️ Sincronizando com Sheets...", "#d97706");
+      try {
+        let res = await fetch(API_URL + "?action=getDados");
+        let json = await res.json();
 
-      if (_supabase) {
-        try {
-          const { data, error } = await _supabase.from('despesas').select('*');
-          if (error) throw error;
-
-          var tbody = document.getElementById('tabela-corpo');
-          tbody.innerHTML = '';
-          if (data) {
-            data.forEach(function(item) { criarLinhaTabela(item); });
-          }
-
-          atualizarSelectsControles();
-          filtrarDespesas();
-          atualizarStatusSync("✓ Sincronizado", "#38ef7d");
-        } catch (err) {
-          console.error('Erro no Supabase:', err);
-          atualizarStatusSync("✕ Erro ao carregar", "#e53e3e");
-          carregarDadosLocalStorage();
+        if (json.controles && json.controles.length > 0) {
+          controles = json.controles;
         }
-      } else {
-        carregarDadosLocalStorage();
+        atualizarSelectsControles();
+
+        var tbody = document.getElementById('tabela-corpo');
+        tbody.innerHTML = '';
+        if (json.despesas) {
+          json.despesas.forEach(function(item) { criarLinhaTabela(item); });
+        }
+        filtrarDespesas();
+        atualizarStatusSync("✓ Sheets Sincronizado", "#38ef7d");
+      } catch (err) {
+        console.error(err);
+        atualizarStatusSync("✕ Erro de Sincronização", "#e53e3e");
       }
-    }
-
-    function carregarDadosLocalStorage() {
-      var controlesSalvos = localStorage.getItem('app_controles');
-      if (controlesSalvos) controles = JSON.parse(controlesSalvos);
-
-      var despesasSalvas = localStorage.getItem('app_despesas_v2');
-      var dadosParaCarregar = despesasSalvas ? JSON.parse(despesasSalvas) : [];
-
-      var tbody = document.getElementById('tabela-corpo');
-      tbody.innerHTML = '';
-      dadosParaCarregar.forEach(function(item) { criarLinhaTabela(item); });
-
-      atualizarSelectsControles();
-      filtrarDespesas();
-      atualizarStatusSync("✓ Modo Offline", "#a0aec0");
     }
 
     function calcularStatusAutomatico(vencimentoIso, statusAtual) {
@@ -415,45 +385,26 @@
         }
 
         var objetoDespesa = {
+          id: idEmEdicao,
           controle: novoControle,
           fornecedor: novoFornecedor,
           valor: valorNumerico,
           vencimento: novoVencimentoIso,
-          pagamento: novoPagamentoIso || null,
+          pagamento: novoPagamentoIso || "",
           status: statusCalculado,
           anexo: anexoBase64
         };
 
-        if (_supabase) {
-          atualizarStatusSync("☁️ Salvando...", "#d97706");
-          try {
-            if (idEmEdicao) {
-              await _supabase.from('despesas').update(objetoDespesa).eq('id', idEmEdicao);
-            } else {
-              await _supabase.from('despesas').insert([objetoDespesa]);
-            }
-            await carregarDados();
-          } catch (err) {
-            console.error(err);
-            atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
-          }
-        } else {
-          if (!linhaEmEdicao) {
-            objetoDespesa.id = Date.now().toString();
-            criarLinhaTabela(objetoDespesa);
-          } else {
-            linhaEmEdicao.dataset.controle = novoControle;
-            linhaEmEdicao.dataset.status = statusCalculado;
-            linhaEmEdicao.dataset.anexo = anexoBase64;
-            linhaEmEdicao.cells[1].innerText = novoFornecedor;
-            linhaEmEdicao.cells[2].innerText = valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-            linhaEmEdicao.cells[3].innerText = formatarParaTabelaDate(novoVencimentoIso);
-            linhaEmEdicao.cells[4].innerText = statusCalculado === 'PAGA' ? formatarParaTabelaDate(novoPagamentoIso) : '-';
-          }
-          salvarCacheLocal();
-        }
+        atualizarStatusSync("☁️ Salvando no Sheets...", "#d97706");
 
-        fecharModalEdicao();
+        try {
+          await fetch(API_URL + "?action=salvarDespesa&data=" + encodeURIComponent(JSON.stringify(objetoDespesa)));
+          await carregarTudoGitHub();
+          fecharModalEdicao();
+        } catch (err) {
+          console.error(err);
+          atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
+        }
       };
 
       if (inputAnexo.files && inputAnexo.files[0]) {
@@ -471,40 +422,15 @@
       var id = tr.dataset.id;
 
       if (confirm('Deseja realmente excluir esta despesa?')) {
-        if (_supabase) {
-          atualizarStatusSync("☁️ Excluindo...", "#d97706");
-          try {
-            await _supabase.from('despesas').delete().eq('id', id);
-            await carregarDados();
-          } catch (err) {
-            console.error(err);
-            atualizarStatusSync("✕ Erro ao excluir", "#e53e3e");
-          }
-        } else {
-          tr.remove();
-          salvarCacheLocal();
+        atualizarStatusSync("☁️ Excluindo...", "#d97706");
+        try {
+          await fetch(API_URL + "?action=excluirDespesa&id=" + id);
+          await carregarTudoGitHub();
+        } catch (err) {
+          console.error(err);
+          atualizarStatusSync("✕ Erro ao excluir", "#e53e3e");
         }
       }
-    }
-
-    function salvarCacheLocal() {
-      var despesas = [];
-      document.querySelectorAll('#tabela-corpo tr').forEach(function(tr) {
-        despesas.push({
-          id: tr.dataset.id,
-          controle: tr.dataset.controle,
-          fornecedor: tr.cells[1].innerText.trim(),
-          valor: extrairValorNumerico(tr.cells[2].innerText),
-          vencimento: formatarParaInputDate(tr.cells[3].innerText.trim()),
-          pagamento: formatarParaInputDate(tr.cells[4].innerText.trim()),
-          status: tr.dataset.status,
-          anexo: tr.dataset.anexo || ""
-        });
-      });
-      localStorage.setItem('app_controles', JSON.stringify(controles));
-      localStorage.setItem('app_despesas_v2', JSON.stringify(despesas));
-      filtrarDespesas();
-      atualizarStatusSync("✓ Modo Offline", "#a0aec0");
     }
 
     function abrirModalNovaDespesa() {
@@ -609,6 +535,17 @@
       });
     }
 
+    async function salvarControlesRemoto() {
+      atualizarStatusSync("☁️ Salvando controles...", "#d97706");
+      try {
+        await fetch(API_URL + "?action=salvarControles&data=" + encodeURIComponent(JSON.stringify(controles)));
+        atualizarStatusSync("✓ Sheets Sincronizado", "#38ef7d");
+      } catch (err) {
+        console.error(err);
+        atualizarStatusSync("✕ Erro ao salvar controles", "#e53e3e");
+      }
+    }
+
     function adicionarNovoControle() {
       var input = document.getElementById('novo-controle-nome');
       var nome = input.value.trim();
@@ -619,7 +556,7 @@
       input.value = '';
       renderizarListaControlesModal();
       atualizarSelectsControles();
-      salvarCacheLocal();
+      salvarControlesRemoto();
     }
 
     function editarNomeControle(index) {
@@ -629,7 +566,7 @@
         controles[index] = novo.trim();
         renderizarListaControlesModal();
         atualizarSelectsControles();
-        salvarCacheLocal();
+        salvarControlesRemoto();
       }
     }
 
@@ -640,7 +577,7 @@
         controles.splice(index, 1);
         renderizarListaControlesModal();
         atualizarSelectsControles();
-        salvarCacheLocal();
+        salvarControlesRemoto();
       }
     }
 
@@ -760,23 +697,16 @@
       if (marcados.length === 0) return alert('Selecione pelo menos uma despesa para pagar.');
 
       var hojeIso = new Date().toISOString().split('T')[0];
+      var idsParaPagar = marcados.map(function(tr) { return tr.dataset.id; });
 
       if (confirm('Marcar as ' + marcados.length + ' despesas selecionadas como PAGAS com a data de hoje?')) {
-        for (var i = 0; i < marcados.length; i++) {
-          var tr = marcados[i];
-          if (_supabase) {
-            await _supabase.from('despesas').update({ status: 'PAGA', pagamento: hojeIso }).eq('id', tr.dataset.id);
-          } else {
-            tr.dataset.status = 'PAGA';
-            tr.cells[4].innerText = formatarParaTabelaDate(hojeIso);
-            tr.cells[5].innerHTML = '<span class="badge-status badge-paga">PAGA</span>';
-          }
-        }
-
-        if (_supabase) {
-          await carregarDados();
-        } else {
-          salvarCacheLocal();
+        atualizarStatusSync("☁️ Processando pagamentos...", "#d97706");
+        try {
+          await fetch(API_URL + "?action=pagarMultiplas&ids=" + encodeURIComponent(JSON.stringify(idsParaPagar)) + "&dataPagamento=" + hojeIso);
+          await carregarTudoGitHub();
+        } catch (err) {
+          console.error(err);
+          atualizarStatusSync("✕ Erro ao processar pagamentos", "#e53e3e");
         }
       }
     }
