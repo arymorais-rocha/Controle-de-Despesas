@@ -289,7 +289,12 @@
     async function carregarTudoGitHub() {
       atualizarStatusSync("☁️ Sincronizando com Sheets...", "#d97706");
       try {
-        let res = await fetch(API_URL + "?action=getDados");
+        // Incluído suporte a redirecionamentos do Apps Script ({ redirect: 'follow' })
+        let res = await fetch(API_URL + "?action=getDados", {
+          method: "GET",
+          redirect: "follow"
+        });
+        
         let json = await res.json();
 
         if (json.controles && json.controles.length > 0) {
@@ -398,7 +403,7 @@
         atualizarStatusSync("☁️ Salvando no Sheets...", "#d97706");
 
         try {
-          await fetch(API_URL + "?action=salvarDespesa&data=" + encodeURIComponent(JSON.stringify(objetoDespesa)));
+          await fetch(API_URL + "?action=salvarDespesa&data=" + encodeURIComponent(JSON.stringify(objetoDespesa)), { redirect: 'follow' });
           await carregarTudoGitHub();
           fecharModalEdicao();
         } catch (err) {
@@ -424,7 +429,7 @@
       if (confirm('Deseja realmente excluir esta despesa?')) {
         atualizarStatusSync("☁️ Excluindo...", "#d97706");
         try {
-          await fetch(API_URL + "?action=excluirDespesa&id=" + id);
+          await fetch(API_URL + "?action=excluirDespesa&id=" + id, { redirect: 'follow' });
           await carregarTudoGitHub();
         } catch (err) {
           console.error(err);
@@ -538,7 +543,7 @@
     async function salvarControlesRemoto() {
       atualizarStatusSync("☁️ Salvando controles...", "#d97706");
       try {
-        await fetch(API_URL + "?action=salvarControles&data=" + encodeURIComponent(JSON.stringify(controles)));
+        await fetch(API_URL + "?action=salvarControles&data=" + encodeURIComponent(JSON.stringify(controles)), { redirect: 'follow' });
         atualizarStatusSync("✓ Sheets Sincronizado", "#38ef7d");
       } catch (err) {
         console.error(err);
@@ -702,7 +707,7 @@
       if (confirm('Marcar as ' + marcados.length + ' despesas selecionadas como PAGAS com a data de hoje?')) {
         atualizarStatusSync("☁️ Processando pagamentos...", "#d97706");
         try {
-          await fetch(API_URL + "?action=pagarMultiplas&ids=" + encodeURIComponent(JSON.stringify(idsParaPagar)) + "&dataPagamento=" + hojeIso);
+          await fetch(API_URL + "?action=pagarMultiplas&ids=" + encodeURIComponent(JSON.stringify(idsParaPagar)) + "&dataPagamento=" + hojeIso, { redirect: 'follow' });
           await carregarTudoGitHub();
         } catch (err) {
           console.error(err);
