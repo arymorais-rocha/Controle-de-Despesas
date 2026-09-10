@@ -15,7 +15,7 @@
     }
 
     body {
-      background-color: #0f172a;
+      background-color: #0b1329;
       color: #f8fafc;
       padding: 20px;
     }
@@ -93,22 +93,14 @@
       border-color: #16a34a;
     }
 
-    .btn-success:hover {
-      background-color: #15803d;
-    }
-
     .btn-danger {
       background-color: #dc2626;
       border-color: #dc2626;
     }
 
-    .btn-danger:hover {
-      background-color: #b91c1c;
-    }
-
     .cards-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 15px;
       margin-bottom: 20px;
     }
@@ -116,7 +108,7 @@
     .card {
       background-color: #ffffff;
       color: #0f172a;
-      padding: 15px 20px;
+      padding: 16px 20px;
       border-radius: 8px;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
@@ -136,13 +128,14 @@
     }
 
     .filters-section {
-      background-color: #1e293b;
-      padding: 15px;
+      background-color: #162032;
+      padding: 16px;
       border-radius: 8px;
-      margin-bottom: 15px;
+      margin-bottom: 20px;
       display: flex;
       flex-direction: column;
       gap: 12px;
+      border: 1px solid #1e293b;
     }
 
     .filter-row {
@@ -153,13 +146,18 @@
     }
 
     .form-control {
-      background-color: #0f172a;
+      background-color: #0b1329;
       border: 1px solid #334155;
       color: #f8fafc;
       padding: 8px 12px;
       border-radius: 6px;
       font-size: 0.9rem;
       outline: none;
+    }
+
+    select.form-control option {
+      background-color: #0b1329;
+      color: #f8fafc;
     }
 
     .form-control:focus {
@@ -185,22 +183,23 @@
       background-color: #ffffff;
       border-radius: 8px;
       overflow-x: auto;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
       text-align: left;
-      color: #334155;
+      color: #1e293b;
       font-size: 0.9rem;
     }
 
     th {
-      background-color: #f8fafc;
+      background-color: #ffffff;
       color: #475569;
-      padding: 12px 16px;
-      font-weight: 600;
-      border-bottom: 1px solid #e2e8f0;
+      padding: 14px 16px;
+      font-weight: 700;
+      border-bottom: 2px solid #e2e8f0;
       white-space: nowrap;
     }
 
@@ -208,10 +207,11 @@
       padding: 12px 16px;
       border-bottom: 1px solid #e2e8f0;
       white-space: nowrap;
+      background-color: #ffffff;
     }
 
-    tbody tr:hover {
-      background-color: #f1f5f9;
+    tbody tr:hover td {
+      background-color: #f8fafc;
     }
 
     .badge {
@@ -242,13 +242,14 @@
     }
 
     .modal-content {
-      background-color: #1e293b;
+      background-color: #162032;
       color: #f8fafc;
       padding: 24px;
       border-radius: 8px;
       width: 100%;
       max-width: 500px;
       box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+      border: 1px solid #334155;
     }
 
     .modal-header {
@@ -256,10 +257,6 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 20px;
-    }
-
-    .modal-header h3 {
-      font-size: 1.2rem;
     }
 
     .close-btn {
@@ -472,7 +469,13 @@
     async function carregarTudoGitHub() {
       atualizarStatusSync("🔄 Sincronizando...", "#d97706");
       try {
-        const response = await fetch(`${API_URL}?action=getDados`);
+        const response = await fetch(`${API_URL}?action=getDados`, {
+          method: "GET",
+          redirect: "follow"
+        });
+        
+        if (!response.ok) throw new Error("Erro na requisição da API");
+
         const data = await response.json();
         
         todasDespesas = data.despesas || [];
@@ -484,8 +487,8 @@
         aplicarFiltros();
         atualizarStatusSync("✓ Sincronizado", "#16a34a");
       } catch (err) {
-        console.error(err);
-        atualizarStatusSync("✕ Erro ao carregar", "#e53e3e");
+        console.error("Erro ao carregar dados:", err);
+        atualizarStatusSync("✕ Erro ao carregar", "#dc2626");
       }
     }
 
@@ -735,7 +738,7 @@
 
         } catch (err) {
           console.error(err);
-          atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
+          atualizarStatusSync("✕ Erro ao salvar", "#dc2626");
         }
       };
 
@@ -753,11 +756,11 @@
       if (!confirm("Tem certeza que deseja excluir esta despesa?")) return;
       atualizarStatusSync("☁️ Excluindo...", "#d97706");
       try {
-        await fetch(`${API_URL}?action=excluirDespesa&id=${id}`);
+        await fetch(`${API_URL}?action=excluirDespesa&id=${id}`, { redirect: "follow" });
         await carregarTudoGitHub();
       } catch (err) {
         console.error(err);
-        atualizarStatusSync("✕ Erro ao excluir", "#e53e3e");
+        atualizarStatusSync("✕ Erro ao excluir", "#dc2626");
       }
     }
 
@@ -770,11 +773,11 @@
 
       atualizarStatusSync("☁️ Atualizando pagamentos...", "#d97706");
       try {
-        await fetch(`${API_URL}?action=pagarMultiplas&ids=${encodeURIComponent(JSON.stringify(selecionadas))}&dataPagamento=${dataPag}`);
+        await fetch(`${API_URL}?action=pagarMultiplas&ids=${encodeURIComponent(JSON.stringify(selecionadas))}&dataPagamento=${dataPag}`, { redirect: "follow" });
         await carregarTudoGitHub();
       } catch (err) {
         console.error(err);
-        atualizarStatusSync("✕ Erro ao pagar", "#e53e3e");
+        atualizarStatusSync("✕ Erro ao pagar", "#dc2626");
       }
     }
 
@@ -783,7 +786,7 @@
       lista.innerHTML = "";
       todosControles.forEach((c, idx) => {
         lista.innerHTML += `
-          <li style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; background:#0f172a; padding:6px 12px; border-radius:4px;">
+          <li style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; background:#0b1329; padding:6px 12px; border-radius:4px; border:1px solid #334155;">
             <span>${c}</span>
             <button class="btn btn-danger" style="padding:2px 6px; font-size:0.75rem;" onclick="removerControle(${idx})">🗑️</button>
           </li>
@@ -817,13 +820,13 @@
     async function salvarControlesNoServer() {
       atualizarStatusSync("☁️ Salvando controles...", "#d97706");
       try {
-        await fetch(`${API_URL}?action=salvarControles&data=${encodeURIComponent(JSON.stringify(todosControles))}`);
+        await fetch(`${API_URL}?action=salvarControles&data=${encodeURIComponent(JSON.stringify(todosControles))}`, { redirect: "follow" });
         atualizarSelectControles();
         aplicarFiltros();
         atualizarStatusSync("✓ Sincronizado", "#16a34a");
       } catch (err) {
         console.error(err);
-        atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
+        atualizarStatusSync("✕ Erro ao salvar", "#dc2626");
       }
     }
 
