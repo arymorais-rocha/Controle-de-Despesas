@@ -227,7 +227,6 @@
     .badge-vencida { background-color: #fee2e2; color: #991b1b; }
     .badge-hoje { background-color: #e0e7ff; color: #3730a3; }
 
-    /* Modais */
     .modal {
       display: none;
       position: fixed;
@@ -383,7 +382,6 @@
     </div>
   </div>
 
-  <!-- Modal Cadastro/Edição de Despesa -->
   <div class="modal" id="modal-edicao">
     <div class="modal-content">
       <div class="modal-header">
@@ -430,7 +428,6 @@
     </div>
   </div>
 
-  <!-- Modal Gerenciar Controles -->
   <div class="modal" id="modal-controles">
     <div class="modal-content">
       <div class="modal-header">
@@ -455,7 +452,6 @@
   </div>
 
   <script>
-    // URL do seu Google Apps Script (Executável Web App)
     const API_URL = "https://script.google.com/macros/s/AKfycbx7XwZmTXYiLEAmy7_kS9Z2FsNag3J01P2p0qO1aL1q/exec";
 
     let todasDespesas = [];
@@ -722,12 +718,22 @@
         atualizarStatusSync("☁️ Salvando no Sheets...", "#d97706");
 
         try {
+          const formData = new URLSearchParams();
+          formData.append("action", "salvarDespesa");
+          formData.append("data", JSON.stringify(objetoDespesa));
+
           await fetch(API_URL, {
             method: "POST",
-            body: JSON.stringify({ action: "salvarDespesa", data: objetoDespesa })
+            mode: "no-cors",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: formData.toString()
           });
-          await carregarTudoGitHub();
-          fecharModalEdicao();
+
+          setTimeout(async function() {
+            await carregarTudoGitHub();
+            fecharModalEdicao();
+          }, 1200);
+
         } catch (err) {
           console.error(err);
           atualizarStatusSync("✕ Erro ao salvar", "#e53e3e");
